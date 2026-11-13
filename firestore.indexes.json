@@ -1,0 +1,59 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "trade_links",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "encounters",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "encounters",
+      "fieldPath": "state",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trade_links",
+      "fieldPath": "tokenHash",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "operations",
+      "fieldPath": "result",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "operations",
+      "fieldPath": "payloadHash",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "saves",
+      "fieldPath": "snapshot",
+      "indexes": []
+    }
+  ]
+}

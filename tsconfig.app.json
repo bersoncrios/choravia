@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": ".aot",
+    "rootDir": "src",
+    "declaration": false
+  },
+  "angularCompilerOptions": {
+    "strictTemplates": true,
+    "strictInjectionParameters": true,
+    "compilationMode": "full"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/dev.ts"]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "choravia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "ngc -p tsconfig.app.json && vite build",
+    "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/*.test.js",
+    "test:browser": "node tests/browser-smoke.mjs",
+    "test:ui": "node tests/browser-ui.mjs",
+    "test:animations": "node tests/browser-animations.mjs",
+    "test:combat": "node tests/browser-combat.mjs",
+    "test:hair-daily": "node tests/browser-hair-daily.mjs",
+    "test:account": "node tests/browser-account-expedition.mjs",
+    "build:backend": "npm run build --workspace choravia-functions",
+    "test:emulator": "ngc -p tsconfig.app.json && node --test tests/emulator/*.test.mjs",
+    "test:welcome": "node tests/browser-welcome.mjs",
+    "test:live-ops": "node tests/browser-live-ops.mjs"
+  },
+  "dependencies": {
+    "@angular/core": "20.3.34",
+    "@angular/common": "20.3.34",
+    "@angular/platform-browser": "20.3.34",
+    "rxjs": "7.8.2",
+    "tslib": "2.8.1",
+    "zone.js": "0.15.1",
+    "firebase": "11.10.0"
+  },
+  "devDependencies": {
+    "@angular/compiler": "20.3.34",
+    "typescript": "5.9.3",
+    "vite": "6.4.1",
+    "@types/node": "22.10.2",
+    "playwright": "1.50.1",
+    "@angular/compiler-cli": "20.3.34",
+    "@babel/core": "7.29.7"
+  },
+  "overrides": {
+    "@types/estree": "1.0.8",
+    "playwright-core": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.50.1.tgz",
+    "rollup": "4.59.0",
+    "esbuild": "0.25.12",
+    "postcss": "8.5.32",
+    "string-width": "8.1.0",
+    "yargs": "18.0.0",
+    "cliui": "9.0.1",
+    "semver": "7.7.3",
+    "wrap-ansi": "9.0.2",
+    "yargs-parser": "22.0.0",
+    "@grpc/grpc-js": "1.14.1",
+    "@grpc/proto-loader": "0.8.0"
+  },
+  "engines": {
+    "node": ">=22.12.0 <23 || >=24.0.0 <25"
+  },
+  "workspaces": [
+    "functions"
+  ]
+}

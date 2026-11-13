@@ -1,0 +1,452 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function own(uid) { return signedIn() && request.auth.uid == uid; }
+    function authProfileMatches() {
+      return request.resource.data.keys().hasAll(['displayName', 'email', 'photoURL', 'displayNameSearch', 'updatedAt'])
+        && request.resource.data.displayName == request.auth.token.get('name', null)
+        && request.resource.data.email == request.auth.token.get('email', null)
+        && request.resource.data.photoURL == request.auth.token.get('picture', null)
+        && request.resource.data.displayNameSearch is string
+        && request.resource.data.displayNameSearch.size() <= 256
+        && request.resource.data.updatedAt == request.time;
+    }
+    match /users/{uid} {
+      allow get: if own(uid) || admin();
+      allow list: if admin();
+      allow delete: if false;
+      allow create: if own(uid)
+        && request.resource.data.keys().hasOnly(['displayName', 'email', 'photoURL', 'displayNameSearch', 'updatedAt'])
+        && authProfileMatches();
+      allow update: if own(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'email', 'photoURL', 'displayNameSearch', 'updatedAt'])
+        && authProfileMatches();
+      match /online/{stateId} {
+        // Operational state contains no email, profile or save; exact reads enable swaps.
+        allow get: if signedIn() && stateId == 'state';
+        allow create: if own(uid) && stateId == 'state' && onlineState(request.resource.data);
+        allow update: if stateId == 'state' && onlineState(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.inventoryRevision == resource.data.inventoryRevision + 1
+          && (own(uid) || (signedIn() && resource.data.activeTradeId != null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeTradeId','inventoryRevision'])
+            && request.resource.data.activeTradeId == null
+            && tradeAfter(resource.data.activeTradeId).creatorUid == uid
+            && ((tradeAfter(resource.data.activeTradeId).status == 'completed'
+                && tradeAfter(resource.data.activeTradeId).acceptedBy == request.auth.uid)
+              || (tradeAfter(resource.data.activeTradeId).status == 'expired'
+                && tradeAfter(resource.data.activeTradeId).expiresAt <= request.time.toMillis()))));
+        allow list, delete: if false;
+      }
+      match /expedition/{statusId} {
+        allow get: if own(uid) && statusId == 'status';
+        allow create, update: if own(uid) && statusId == 'status'
+          && request.resource.data.keys().hasOnly(['activeCreatureId','saveRevision','updatedAt'])
+          && request.resource.data.saveRevision == getAfter(/databases/$(database)/documents/users/$(uid)/saves/solo).data.revision
+          && request.resource.data.updatedAt == request.time
+          && (request.resource.data.activeCreatureId == null
+            || (validId(request.resource.data.activeCreatureId)
+              && get(/databases/$(database)/documents/creatures/$(request.resource.data.activeCreatureId)).data.ownerId == uid
+              && (get(/databases/$(database)/documents/creatures/$(request.resource.data.activeCreatureId)).data.lock == null
+                || get(/databases/$(database)/documents/creatures/$(request.resource.data.activeCreatureId)).data.lock.kind != 'trade')));
+        allow list, delete: if false;
+      }
+      match /operations/{operationId} {
+        allow get: if own(uid);
+        allow create: if own(uid) && validId(operationId)
+          && request.resource.data.keys().hasOnly(['kind','payloadHash','result','createdAt'])
+          && request.resource.data.kind is string && request.resource.data.payloadHash is string
+          && request.resource.data.result is map && request.resource.data.createdAt is int;
+        allow list, update, delete: if false;
+      }
+      match /daily_challenges/{cycleId} {
+        allow get: if own(uid);
+        allow create, update: if own(uid)
+          && request.resource.data.keys().hasOnly(['cycleId','resetAt','progress','claimed','rewards','completionBonusEarned','qualifiedForWeek'])
+          && request.resource.data.cycleId == cycleId && request.resource.data.resetAt is int
+          && request.resource.data.progress is map && request.resource.data.progress.size() <= 4
+          && request.resource.data.claimed is list && request.resource.data.claimed.size() <= 5
+          && request.resource.data.rewards is list && request.resource.data.rewards.size() <= 5
+          && request.resource.data.completionBonusEarned is bool && request.resource.data.qualifiedForWeek is bool;
+        allow list, delete: if false;
+      }
+      match /weekly_challenges/{weekId} {
+        allow get: if own(uid);
+        allow create, update: if own(uid)
+          && request.resource.data.keys().hasOnly(['weekId','qualifiedDays','reward','claimed'])
+          && request.resource.data.weekId == weekId
+          && request.resource.data.qualifiedDays is list && request.resource.data.qualifiedDays.size() <= 7
+          && (request.resource.data.reward == null || request.resource.data.reward is map)
+          && request.resource.data.claimed is list && request.resource.data.claimed.size() <= 1;
+        allow list, delete: if false;
+      }
+      match /preferences/{preferenceId} {
+        allow read: if own(uid) && preferenceId == 'main';
+        allow create, update: if own(uid) && preferenceId == 'main'
+          && request.resource.data.keys().hasAll(['soundEnabled', 'reducedMotion', 'captureMode', 'schemaVersion'])
+          && request.resource.data.keys().hasOnly(['soundEnabled', 'reducedMotion', 'captureMode', 'schemaVersion'])
+          && request.resource.data.soundEnabled is bool
+          && request.resource.data.reducedMotion is bool
+          && request.resource.data.captureMode in ['timing', 'accessible']
+          && request.resource.data.schemaVersion == 1;
+        allow delete: if own(uid) && preferenceId == 'main';
+      }
+      match /saves/{saveId} {
+        function validSave() {
+          return request.resource.data.keys().hasAll(['schemaVersion','revision','writeId','snapshot','createdAt','updatedAt'])
+            && request.resource.data.keys().hasOnly(['schemaVersion','revision','writeId','snapshot','createdAt','updatedAt'])
+            && request.resource.data.schemaVersion == 1
+            && request.resource.data.revision is int
+            && request.resource.data.writeId is string
+            && request.resource.data.writeId.matches('^[A-Za-z0-9_-]{8,100}$')
+            && request.resource.data.snapshot is string
+            && request.resource.data.snapshot.size() <= 700000
+            && request.resource.data.updatedAt == request.time;
+        }
+        allow get: if (own(uid) || admin()) && saveId == 'solo';
+        allow create: if own(uid) && saveId == 'solo' && validSave()
+          && request.resource.data.revision == 1
+          && request.resource.data.createdAt == request.time;
+        allow update: if (own(uid) || (admin()
+          && getAfter(/databases/$(database)/documents/game_master_audit/$(request.resource.data.writeId)).data.actorUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/game_master_audit/$(request.resource.data.writeId)).data.targetUid == uid
+          && getAfter(/databases/$(database)/documents/game_master_audit/$(request.resource.data.writeId)).data.targetSaveRevision == request.resource.data.revision
+          && !exists(/databases/$(database)/documents/game_master_audit/$(request.resource.data.writeId))))
+          && saveId == 'solo' && validSave()
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.writeId != resource.data.writeId
+          && request.resource.data.createdAt == resource.data.createdAt;
+        allow list, delete: if false;
+      }
+    }
+    function admin() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
+    }
+    function species(value) { return value in ['WW001','WW002','WW003','WW004','WW005']; }
+    function validId(value) { return value is string && value.matches('^[A-Za-z0-9_-]{8,100}$'); }
+    function onlineState(d) {
+      return d.keys().hasAll(['schemaVersion','createdAt','inventoryRevision','starterGranted','firstCaptureEncounterId','activeEncounterId','activeTradeId','lastEncounterAt'])
+        && d.keys().hasOnly(['schemaVersion','createdAt','inventoryRevision','starterGranted','firstCaptureEncounterId','activeEncounterId','activeTradeId','lastEncounterAt'])
+        && d.schemaVersion == 1 && d.starterGranted == true
+        && d.createdAt is int && d.inventoryRevision is int && d.inventoryRevision >= 1
+        && d.lastEncounterAt is int
+        && (d.firstCaptureEncounterId == null || validId(d.firstCaptureEncounterId))
+        && (d.activeEncounterId == null || validId(d.activeEncounterId))
+        && (d.activeTradeId == null || validId(d.activeTradeId));
+    }
+    function tradeAfter(tradeId) { return getAfter(/databases/$(database)/documents/trade_links/$(tradeId)).data; }
+    function creatureAfter(creatureId) { return getAfter(/databases/$(database)/documents/creatures/$(creatureId)).data; }
+    function encounterAfter(encounterId) { return getAfter(/databases/$(database)/documents/encounters/$(encounterId)).data; }
+    function validCreature(d) {
+      return d.keys().hasAll(['ownerId','speciesId','createdAt','originEncounterId','revision','lock'])
+        && d.keys().hasOnly(['ownerId','speciesId','level','experience','createdAt','originEncounterId','revision','lock','transferTradeId'])
+        && d.ownerId is string && species(d.speciesId)
+        && d.get('level', 1) is int && d.get('level', 1) >= 1 && d.get('level', 1) <= 30
+        && d.get('experience', 0) is int && d.get('experience', 0) >= 0 && (d.get('level',1) == 30 ? d.get('experience',0) == 0 : d.get('experience',0) < 30 + 12 * d.get('level',1))
+        && d.createdAt is int && d.originEncounterId is string
+        && d.revision is int && d.revision >= 1
+        && (d.lock == null || (d.lock is map && d.lock.keys().hasOnly(['kind','id'])
+          && d.lock.kind in ['encounter','trade'] && validId(d.lock.id)));
+    }
+    function releasedLock(d) {
+      return d.lock == null || (d.lock.kind == 'encounter'
+        ? encounterAfter(d.lock.id).status in ['resolved','expired']
+        : tradeAfter(d.lock.id).status in ['completed','cancelled','expired']);
+    }
+    function availableForTrade(uid, creatureId) {
+      return !exists(/databases/$(database)/documents/users/$(uid)/expedition/status)
+        || get(/databases/$(database)/documents/users/$(uid)/expedition/status).data.activeCreatureId != creatureId;
+    }
+    function newLock(d, creatureId) {
+      return d.lock == null || (d.lock.kind == 'encounter'
+        ? (encounterAfter(d.lock.id).uid == request.auth.uid
+          && encounterAfter(d.lock.id).creatureId == creatureId
+          && encounterAfter(d.lock.id).status == 'open')
+        : (availableForTrade(request.auth.uid, creatureId)
+          && tradeAfter(d.lock.id).creatorUid == request.auth.uid
+          && tradeAfter(d.lock.id).offeredCreatureId == creatureId
+          && tradeAfter(d.lock.id).status == 'open'));
+    }
+    function transferred(creatureId) {
+      let d = request.resource.data;
+      let t = tradeAfter(d.transferTradeId);
+      let before = get(/databases/$(database)/documents/trade_links/$(d.transferTradeId)).data;
+      return before.status == 'open' && t.revision == before.revision + 1 && t.status == 'completed' && t.acceptedBy == request.auth.uid
+        && d.lock == null
+        && d.diff(resource.data).affectedKeys().hasOnly(['ownerId','lock','revision','transferTradeId'])
+        && ((t.offeredCreatureId == creatureId && resource.data.ownerId == t.creatorUid
+            && d.ownerId == t.acceptedBy && resource.data.lock.kind == 'trade'
+            && resource.data.lock.id == d.transferTradeId)
+          || (t.receivedCreatureId == creatureId && resource.data.ownerId == t.acceptedBy
+            && d.ownerId == t.creatorUid && resource.data.lock == null
+            && availableForTrade(t.acceptedBy, creatureId)));
+    }
+    function expiredTradeRelease() {
+      let d = resource.data;
+      let t = tradeAfter(d.lock.id);
+      return d.lock.kind == 'trade' && t.status == 'expired'
+        && t.creatorUid == d.ownerId && t.expiresAt <= request.time.toMillis()
+        && request.resource.data.lock == null
+        && request.resource.data.diff(d).affectedKeys().hasOnly(['lock','revision']);
+    }
+    match /creatures/{creatureId} {
+      // Only exact reads reveal trade assets. Collections remain owner-filtered.
+      allow get: if signedIn() && (resource == null || resource.data.ownerId == request.auth.uid || admin()
+        || (resource.data.lock != null && resource.data.lock.kind == 'trade'
+          && get(/databases/$(database)/documents/trade_links/$(resource.data.lock.id)).data.status == 'open'));
+      allow list: if signedIn() && (resource.data.ownerId == request.auth.uid || admin());
+      allow create: if signedIn() && validCreature(request.resource.data)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.revision == 1 && request.resource.data.lock == null
+        && !('transferTradeId' in request.resource.data)
+        && ((creatureId.matches('^starter-[a-f0-9]{32}$')
+            && hashing.sha256(request.auth.uid).toHexString().lower().matches('^' + creatureId.replace('starter-', '') + '.*')
+            && request.resource.data.speciesId == 'WW001'
+            && request.resource.data.originEncounterId == 'starter'
+            && request.resource.data.get('level',1) == 1 && request.resource.data.get('experience',0) == 0)
+          || (creatureId == 'capture-' + request.resource.data.originEncounterId
+            && encounterAfter(request.resource.data.originEncounterId).uid == request.auth.uid
+            && encounterAfter(request.resource.data.originEncounterId).status == 'resolved'
+            && encounterAfter(request.resource.data.originEncounterId).state.battle.result == 'capture'
+            && encounterAfter(request.resource.data.originEncounterId).state.battle.enemy.speciesId == request.resource.data.speciesId)
+          || (creatureId.matches('^expedition-[a-f0-9]{32}$')
+            && request.resource.data.originEncounterId == creatureId
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/operations/$(creatureId)).data.kind == 'expedition-import'
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/operations/$(creatureId)).data.result.id == creatureId
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/operations/$(creatureId)).data.result.speciesId == request.resource.data.speciesId
+            && !exists(/databases/$(database)/documents/users/$(request.auth.uid)/operations/$(creatureId))));
+      allow update: if signedIn() && validCreature(request.resource.data)
+        && request.resource.data.revision == resource.data.revision + 1
+        && ((resource.data.ownerId == request.auth.uid && request.resource.data.ownerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['level','experience','lock','revision'])
+          && (resource.data.lock == request.resource.data.lock || releasedLock(resource.data))
+          && newLock(request.resource.data, creatureId)
+          && (resource.data.lock == null || resource.data.lock.kind != 'trade'
+            || (request.resource.data.get('level',1) == resource.data.get('level',1)
+              && request.resource.data.get('experience',0) == resource.data.get('experience',0))))
+          || (resource.data.ownerId == request.auth.uid && request.resource.data.ownerId == request.auth.uid
+            && resource.data.originEncounterId == 'starter' && resource.data.lock == null && request.resource.data.lock == null
+            && resource.data.get('level',1) == 1 && resource.data.get('experience',0) == 0
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['speciesId','level','experience','revision'])
+            && !exists(/databases/$(database)/documents/users/$(request.auth.uid)/operations/starter-choice)
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/operations/starter-choice).data.kind == 'starter-choice'
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/operations/starter-choice).data.result.id == creatureId
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/operations/starter-choice).data.result.speciesId == request.resource.data.speciesId)
+          || transferred(creatureId) || expiredTradeRelease());
+      allow delete: if false;
+    }
+    function validTrade(d) {
+      return d.keys().hasAll(['creatorUid','offeredCreatureId','offeredSpeciesId','requestedSpeciesId','status','expiresAt','tokenHash','revision','acceptedBy','receivedCreatureId','completedAt'])
+        && d.keys().hasOnly(['creatorUid','offeredCreatureId','offeredSpeciesId','offeredLevel','requestedSpeciesId','status','expiresAt','tokenHash','revision','acceptedBy','receivedCreatureId','completedAt','tokenProof'])
+        && d.creatorUid is string && validId(d.offeredCreatureId)
+        && species(d.offeredSpeciesId) && species(d.requestedSpeciesId)
+        && d.status in ['open','completed','cancelled','expired']
+        && d.expiresAt is int && d.revision is int && d.revision >= 1
+        && d.tokenHash is string && d.tokenHash.matches('^[a-f0-9]{64}$')
+        && d.get('offeredLevel',1) is int && d.get('offeredLevel',1) >= 1 && d.get('offeredLevel',1) <= 30;
+    }
+    function completedTrade(tradeId) {
+      let d = request.resource.data;
+      let offered = get(/databases/$(database)/documents/creatures/$(resource.data.offeredCreatureId)).data;
+      let received = get(/databases/$(database)/documents/creatures/$(d.receivedCreatureId)).data;
+      return d.status == 'completed' && d.acceptedBy == request.auth.uid
+        && resource.data.creatorUid != request.auth.uid && resource.data.expiresAt > request.time.toMillis()
+        && d.diff(resource.data).affectedKeys().hasOnly(['status','revision','acceptedBy','receivedCreatureId','completedAt','tokenProof'])
+        && d.tokenProof is string && d.tokenProof.matches('^[A-Za-z0-9_-]{43}$')
+        && hashing.sha256(d.tokenProof).toHexString().lower() == resource.data.tokenHash
+        && offered.ownerId == resource.data.creatorUid
+        && offered.lock == {'kind': 'trade', 'id': tradeId}
+        && received.ownerId == request.auth.uid && received.lock == null
+        && received.speciesId == resource.data.requestedSpeciesId
+        && creatureAfter(d.offeredCreatureId).ownerId == request.auth.uid
+        && creatureAfter(d.receivedCreatureId).ownerId == resource.data.creatorUid
+        && creatureAfter(d.offeredCreatureId).transferTradeId == tradeId
+        && creatureAfter(d.receivedCreatureId).transferTradeId == tradeId
+        && creatureAfter(d.offeredCreatureId).lock == null && creatureAfter(d.receivedCreatureId).lock == null;
+    }
+    match /trade_links/{tradeId} {
+      allow get: if signedIn();
+      allow list, delete: if false;
+      allow create: if signedIn() && validId(tradeId) && validTrade(request.resource.data)
+        && request.resource.data.creatorUid == request.auth.uid
+        && request.resource.data.status == 'open' && request.resource.data.revision == 1
+        && request.resource.data.acceptedBy == null && request.resource.data.receivedCreatureId == null
+        && request.resource.data.completedAt == null && !('tokenProof' in request.resource.data)
+        && request.resource.data.expiresAt > request.time.toMillis()
+        && request.resource.data.expiresAt <= request.time.toMillis() + 86400000
+        && creatureAfter(request.resource.data.offeredCreatureId).ownerId == request.auth.uid
+        && creatureAfter(request.resource.data.offeredCreatureId).speciesId == request.resource.data.offeredSpeciesId
+        && creatureAfter(request.resource.data.offeredCreatureId).get('level',1) == request.resource.data.get('offeredLevel',1)
+        && creatureAfter(request.resource.data.offeredCreatureId).lock == {'kind':'trade','id':tradeId};
+      allow update: if signedIn() && validTrade(request.resource.data)
+        && resource.data.status == 'open' && request.resource.data.revision == resource.data.revision + 1
+        && ((resource.data.creatorUid == request.auth.uid
+          && ((request.resource.data.status == 'open' && resource.data.expiresAt > request.time.toMillis()
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tokenHash','revision']))
+            || (request.resource.data.status in ['cancelled','expired']
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','revision'])
+              && (request.resource.data.status != 'expired' || resource.data.expiresAt <= request.time.toMillis())
+              && creatureAfter(resource.data.offeredCreatureId).lock == null)))
+          || (request.resource.data.status == 'expired' && resource.data.expiresAt <= request.time.toMillis()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','revision'])
+            && creatureAfter(resource.data.offeredCreatureId).lock == null)
+          || completedTrade(tradeId));
+    }
+    match /encounters/{encounterId} {
+      function validEncounter(d) {
+        return d.keys().hasAll(['uid','creatureId','rulesVersion','status','expiresAt','nextSeq','state'])
+          && d.keys().hasOnly(['uid','creatureId','rulesVersion','status','expiresAt','nextSeq','state'])
+          && d.uid == request.auth.uid && validId(d.creatureId) && d.rulesVersion == 1
+          && d.status in ['open','resolved','expired'] && d.expiresAt is int
+          && d.nextSeq is int && d.nextSeq >= 0 && d.nextSeq <= 300
+          && d.state is map && d.state.battle is map && d.state.battle.id == encounterId;
+      }
+      allow get: if signedIn() && (resource == null || resource.data.uid == request.auth.uid);
+      allow list, delete: if false;
+      allow create: if signedIn() && validEncounter(request.resource.data)
+        && request.resource.data.status == 'open' && request.resource.data.nextSeq == 0
+        && request.resource.data.expiresAt > request.time.toMillis()
+        && request.resource.data.expiresAt <= request.time.toMillis() + 900000
+        && creatureAfter(request.resource.data.creatureId).ownerId == request.auth.uid
+        && creatureAfter(request.resource.data.creatureId).lock == {'kind':'encounter','id':encounterId};
+      allow update: if signedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'open'
+        && validEncounter(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','nextSeq','status'])
+        && ((request.resource.data.status == 'expired' && request.resource.data.nextSeq == resource.data.nextSeq)
+          || (resource.data.expiresAt > request.time.toMillis()
+            && request.resource.data.nextSeq == resource.data.nextSeq + 1))
+        && (request.resource.data.status == 'open'
+          || creatureAfter(resource.data.creatureId).lock == null);
+    }
+    match /rate_limits/{uid} {
+      allow get: if own(uid);
+      allow create, update: if own(uid)
+        && request.resource.data.keys().hasOnly(['window','count'])
+        && request.resource.data.window is int && request.resource.data.count is int
+        && request.resource.data.window == int(request.time.toMillis() / 60000)
+        && request.resource.data.count >= 1 && request.resource.data.count <= 120
+        && (resource == null || resource.data.window != request.resource.data.window
+          ? request.resource.data.count == 1 : request.resource.data.count == resource.data.count + 1);
+      allow list, delete: if false;
+    }
+    match /domain_events/{eventId} {
+      allow create: if signedIn() && request.resource.data.keys().hasOnly(['type','actorUid','entityId','createdAt','schemaVersion'])
+        && request.resource.data.actorUid == request.auth.uid && request.resource.data.schemaVersion == 1
+        && request.resource.data.type is string && request.resource.data.entityId is string && request.resource.data.createdAt is int;
+      allow read, update, delete: if false;
+    }
+    function contentProof(entityPath, auditId, action) {
+      let a = getAfter(/databases/$(database)/documents/content_audit/$(auditId)).data;
+      return admin() && a.actorUid == request.auth.uid && a.entityPath == entityPath
+        && a.action == action && !exists(/databases/$(database)/documents/content_audit/$(auditId));
+    }
+    function contentMeta(d) {
+      return d.updatedBy == request.auth.uid && d.updatedAt == request.time && d.auditId is string
+        && d.revision is int && d.revision >= 1 && d.revision <= 1000000;
+    }
+    function contentText(d) {
+      return d.name is string && d.name.size() >= 2 && d.name.size() <= 60
+        && d.description is string && d.description.size() >= 5 && d.description.size() <= 240
+        && d.active is bool && d.color is string && d.color.matches('^#[0-9a-fA-F]{6}$');
+    }
+    function addedContent(group, auditId) {
+      return getAfter(/databases/$(database)/documents/content_limits/$(group)).data.auditId == auditId
+        && getAfter(/databases/$(database)/documents/content_limits/$(group)).data.count ==
+          (exists(/databases/$(database)/documents/content_limits/$(group)) ? get(/databases/$(database)/documents/content_limits/$(group)).data.count : 0) + 1;
+    }
+    match /shop_accessories/{id} {
+      allow read: if signedIn();
+      allow create, update: if admin() && id.matches('^custom-[a-z0-9-]{3,54}$')
+        && request.resource.data.keys().hasOnly(['id','name','description','shape','color','price','active','revision','updatedBy','updatedAt','auditId'])
+        && request.resource.data.id == id && contentText(request.resource.data) && contentMeta(request.resource.data)
+        && request.resource.data.shape in ['pin','scarf','crown'] && request.resource.data.price is int
+        && request.resource.data.price >= 0 && request.resource.data.price <= 10000
+        && contentProof('shop_accessories/' + id, request.resource.data.auditId, 'saveAccessory')
+        && (resource == null ? request.resource.data.revision == 1 && addedContent('shop_accessories', request.resource.data.auditId) : request.resource.data.revision == resource.data.revision + 1);
+      allow delete: if false;
+    }
+    match /eco_balance/{id} {
+      allow read: if signedIn();
+      allow create, update: if admin() && id in ['WW001','WW002','WW003','WW004','WW005']
+        && request.resource.data.keys().hasOnly(['id','hp','attack','defense','revision','updatedBy','updatedAt','auditId'])
+        && request.resource.data.id == id && contentMeta(request.resource.data)
+        && request.resource.data.hp is int && request.resource.data.hp >= 20 && request.resource.data.hp <= 200
+        && request.resource.data.attack is int && request.resource.data.attack >= 1 && request.resource.data.attack <= 50
+        && request.resource.data.defense is int && request.resource.data.defense >= 1 && request.resource.data.defense <= 50
+        && contentProof('eco_balance/' + id, request.resource.data.auditId, 'saveBalance')
+        && (resource == null ? request.resource.data.revision == 1 : request.resource.data.revision == resource.data.revision + 1);
+      allow delete: if false;
+    }
+    match /badge_definitions/{id} {
+      allow read: if signedIn();
+      allow create, update: if admin() && id.matches('^badge-[a-z0-9-]{3,54}$')
+        && request.resource.data.keys().hasOnly(['id','name','description','symbol','color','category','active','revision','updatedBy','updatedAt','auditId'])
+        && request.resource.data.id == id && contentText(request.resource.data) && contentMeta(request.resource.data)
+        && request.resource.data.symbol in ['star','leaf','flame','gem','crown'] && request.resource.data.category in ['event','milestone','special']
+        && contentProof('badge_definitions/' + id, request.resource.data.auditId, 'saveBadge')
+        && (resource == null ? request.resource.data.revision == 1 && addedContent('badge_definitions', request.resource.data.auditId) : request.resource.data.revision == resource.data.revision + 1);
+      allow delete: if false;
+    }
+    match /users/{uid}/badges/{id} {
+      allow read: if own(uid) || admin();
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['badgeId','name','description','symbol','color','category','reason','grantedBy','grantedAt','auditId'])
+        && request.resource.data.badgeId == id && request.resource.data.grantedBy == request.auth.uid && request.resource.data.grantedAt == request.time
+        && request.resource.data.reason is string && request.resource.data.reason.size() >= 5 && request.resource.data.reason.size() <= 240
+        && (exists(/databases/$(database)/documents/users/$(uid)) || exists(/databases/$(database)/documents/users/$(uid)/online/state) || exists(/databases/$(database)/documents/users/$(uid)/saves/solo))
+        && get(/databases/$(database)/documents/badge_definitions/$(id)).data.active == true
+        && request.resource.data.name == get(/databases/$(database)/documents/badge_definitions/$(id)).data.name
+        && request.resource.data.description == get(/databases/$(database)/documents/badge_definitions/$(id)).data.description
+        && request.resource.data.symbol == get(/databases/$(database)/documents/badge_definitions/$(id)).data.symbol
+        && request.resource.data.color == get(/databases/$(database)/documents/badge_definitions/$(id)).data.color
+        && request.resource.data.category == get(/databases/$(database)/documents/badge_definitions/$(id)).data.category
+        && contentProof('users/' + uid + '/badges/' + id, request.resource.data.auditId, 'grantBadge');
+      allow update, delete: if false;
+    }
+    match /content_limits/{group} {
+      allow read: if admin();
+      allow create, update: if admin() && group in ['shop_accessories','badge_definitions']
+        && request.resource.data.keys().hasOnly(['count','auditId']) && request.resource.data.count is int
+        && request.resource.data.count >= 1 && request.resource.data.count <= 100
+        && request.resource.data.count == (resource == null ? 0 : resource.data.count) + 1
+        && getAfter(/databases/$(database)/documents/content_audit/$(request.resource.data.auditId)).data.actorUid == request.auth.uid;
+      allow delete: if false;
+    }
+    match /content_audit/{auditId} {
+      allow read: if admin();
+      allow create: if admin() && auditId.matches('^op-[a-f0-9]{64}$')
+        && request.resource.data.keys().hasOnly(['actorUid','action','entityPath','entityId','targetUid','reason','requestHash','createdAt'])
+        && request.resource.data.actorUid == request.auth.uid && request.resource.data.createdAt == request.time
+        && request.resource.data.reason is string && request.resource.data.reason.size() >= 5 && request.resource.data.reason.size() <= 240
+        && request.resource.data.requestHash is string && request.resource.data.requestHash.matches('^[a-f0-9]{64}$')
+        && ((request.resource.data.action == 'saveAccessory' && request.resource.data.entityPath == 'shop_accessories/' + request.resource.data.entityId
+          && getAfter(/databases/$(database)/documents/shop_accessories/$(request.resource.data.entityId)).data.auditId == auditId)
+        || (request.resource.data.action == 'saveBalance' && request.resource.data.entityPath == 'eco_balance/' + request.resource.data.entityId
+          && getAfter(/databases/$(database)/documents/eco_balance/$(request.resource.data.entityId)).data.auditId == auditId)
+        || (request.resource.data.action == 'saveBadge' && request.resource.data.entityPath == 'badge_definitions/' + request.resource.data.entityId
+          && getAfter(/databases/$(database)/documents/badge_definitions/$(request.resource.data.entityId)).data.auditId == auditId)
+        || (request.resource.data.action == 'grantBadge' && request.resource.data.entityPath == 'users/' + request.resource.data.targetUid + '/badges/' + request.resource.data.entityId
+          && getAfter(/databases/$(database)/documents/users/$(request.resource.data.targetUid)/badges/$(request.resource.data.entityId)).data.auditId == auditId));
+      allow update, delete: if false;
+    }
+    match /game_master_audit/{auditId} {
+      allow read: if admin();
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['actorUid','targetUid','action','reason','amount','itemId','requestHash','createdAt','targetSaveRevision'])
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.action in ['grantSeeds','grantCosmetic','resetProgress']
+        && request.resource.data.targetUid is string
+        && request.resource.data.reason is string && request.resource.data.reason.size() >= 5 && request.resource.data.reason.size() <= 240
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.requestHash is string
+        && auditId == 'gm-' + request.resource.data.requestHash
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.targetUid)/saves/solo).data.writeId == auditId
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.targetUid)/saves/solo).data.revision == request.resource.data.targetSaveRevision;
+      allow update, delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

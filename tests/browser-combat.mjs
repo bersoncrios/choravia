@@ -1,0 +1,90 @@
+import { chromium } from "playwright";
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+const browser = await chromium.launch({ timeout: 20000, executablePath: process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true });
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+await context.route(/https:\/\/.*googleapis.com\//, route => route.abort());
+const page = await context.newPage(), errors = [];
+page.on("pageerror", e => errors.push(e.message));
+const app = fn => page.evaluate(fn);
+const phase = expected => page.waitForFunction(value => window.ng.getComponent(document.querySelector("ww-app")).turnPhase() === value, expected, { timeout: 10000 });
+const fixture = async (id = "WW001") => page.evaluate(async speciesId => {
+  const a = window.ng.getComponent(document.querySelector("ww-app"));
+  const { createBattle, creatureMaxHp } = await import("/src/app/domain/game.ts");
+  a.finishPlayback();
+  const g = structuredClone(a.game());
+  g.collection[0].speciesId = speciesId; g.collection[0].hp = creatureMaxHp(speciesId, 1); g.collection[0].level = 1;
+  g.scene = "battle"; g.encountered++;
+  g.battle = createBattle("local-classic-ui", g.collection[0], "WW002", true, "wild", undefined, "classic");
+  await a.session.replaceState(g);
+}, id);
+const state = () => app(() => JSON.parse(JSON.stringify(window.ng.getComponent(document.querySelector("ww-app")).game())));
+try {
+  await mkdir("artifacts", { recursive: true });
+  await page.goto(new URL("/jogar", process.env.BASE_URL ?? "http://127.0.0.1:5173").href);
+  await page.waitForFunction(() => window.ng?.getComponent(document.querySelector("ww-app"))?.loaded(), null, { timeout: 20000 });
+  await app(() => {
+    const a = window.ng.getComponent(document.querySelector("ww-app")); a.receiveAccount = () => {};
+    a.profile.set({ uid: "combat-test", name: "Guardião", email: "combat@example.invalid", photoURL: null }); a.cloudStatus.set("offline");
+  });
+  await page.getByRole("button", { name: "Começar a jornada" }).click();
+  await page.getByRole("button", { name: "Começar com" }).click();
+  await page.getByRole("dialog", { name: "Escolha seu Eco inicial" }).waitFor({ state: "hidden" });
+  await fixture();
+  assert.equal(await page.getByRole("grid").count(), 0);
+  assert.equal(await page.getByRole("button", { name: /Mover/ }).count(), 0);
+  const before = await state();
+  await page.getByRole("button", { name: /Atacar/ }).click();
+  await phase("player");
+  assert.ok(await page.getByRole("button", { name: /Atacar/ }).isDisabled());
+  const firstFrame = await app(() => window.ng.getComponent(document.querySelector("ww-app")).battleView().battle);
+  assert.equal(firstFrame.ally.hp, before.battle.ally.hp);
+  assert.ok(firstFrame.enemy.hp < before.battle.enemy.hp);
+  const revision = (await state()).revision;
+  await app(async () => { const a = window.ng.getComponent(document.querySelector("ww-app")); await a.send({ type: "basic", target: a.game().battle.enemy.pos }); });
+  assert.equal((await state()).revision, revision, "input during playback must not start another round");
+  await phase("enemy");
+  const enemyFrame = await app(() => window.ng.getComponent(document.querySelector("ww-app")).battleView().battle);
+  assert.ok(enemyFrame.ally.hp < firstFrame.ally.hp);
+  await page.screenshot({ path: "artifacts/combat-enemy-phase.png", fullPage: true });
+  await phase("choice");
+  assert.equal((await state()).battle.round, 2);
+  await page.getByRole("button", { name: /Faísca/ }).click();
+  await phase("player");
+  await page.getByRole("button", { name: "Acelerar", exact: true }).click();
+  await phase("choice");
+  assert.ok(await page.getByRole("button", { name: /Faísca/ }).isDisabled());
+  await page.getByRole("button", { name: /Defender/ }).click();
+  await phase("player");
+  await page.getByRole("button", { name: "Acelerar", exact: true }).click();
+  await phase("choice");
+  assert.equal(await page.getByRole("button", { name: /Faísca/ }).isDisabled(), false);
+  for (const [id, label] of [["WW002","Chicote de folha"], ["WW003","Jato d’água"], ["WW004","Estalo"], ["WW005","Impacto de pedra"]]) {
+    await fixture(id);
+    await page.getByRole("button", { name: new RegExp(label) }).click();
+    await phase("player");
+    await page.getByRole("button", { name: "Acelerar", exact: true }).click();
+    await phase("choice");
+    assert.equal((await state()).battle.allyCooldown, 1);
+  }
+  for (const [width,height] of [[320,568],[360,640],[390,844],[768,1024],[1024,768],[1360,900],[667,375]]) {
+    await fixture(); await page.setViewportSize({ width, height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow ${width}`);
+    await page.getByRole("button", { name: /Atacar/ }).click(); await phase("player");
+    await page.getByRole("button", { name: "Acelerar", exact: true }).click(); await phase("choice");
+    await page.screenshot({ path: `artifacts/combat-classic-${width}.png`, fullPage: true });
+  }
+  await fixture();
+  await app(async () => { const a = window.ng.getComponent(document.querySelector("ww-app")); const g = structuredClone(a.game()); g.battle.enemy.hp = 10; await a.session.replaceState(g); });
+  await page.getByRole("button", { name: /Vínculo 100%/ }).click(); await phase("player");
+  assert.equal(await page.getByRole("button", { name: /Continuar explorando/ }).count(), 0);
+  await page.getByRole("button", { name: "Acelerar", exact: true }).click();
+  await page.getByRole("button", { name: /Continuar explorando/ }).waitFor();
+  assert.equal((await state()).battle.result, "capture");
+  await page.reload();
+  await page.waitForFunction(() => window.ng?.getComponent(document.querySelector("ww-app"))?.loaded(), null, { timeout: 20000 });
+  assert.equal(await app(() => window.ng.getComponent(document.querySelector("ww-app")).game().battle.result), "capture");
+  assert.equal(await app(() => window.ng.getComponent(document.querySelector("ww-app")).turnPhase()), "choice");
+  assert.deepEqual(errors, []);
+  console.log("Classic combat passed: explicit phases, staged PV, blocked repeated actions, skip, all skills/cooldowns, 7 viewports, capture and persisted result.");
+} finally { await browser.close(); }

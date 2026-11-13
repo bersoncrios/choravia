@@ -1,0 +1,85 @@
+import { chromium } from "playwright";
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true });
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+await context.route(/https:\/\/.*googleapis.com\//, route => route.abort());
+const page = await context.newPage(), errors = [];
+page.on("pageerror", e => errors.push(e.message));
+try {
+ await mkdir("artifacts", { recursive: true });
+ await page.goto(new URL("/jogar", process.env.BASE_URL ?? "http://127.0.0.1:5173").href);
+ await page.waitForFunction(() => window.ng?.getComponent(document.querySelector("ww-app"))?.loaded());
+ await page.evaluate(() => {
+  const a = window.ng.getComponent(document.querySelector("ww-app"));
+  a.receiveAccount = () => {}; a.profile.set({ uid: "live-gm-test", name: "Guardiã", email: "live@example.invalid", photoURL: null }); a.cloudStatus.set("saved");
+ });
+ await page.getByRole("button", { name: "Começar a jornada", exact: false }).click();
+ await page.getByRole("button", { name: /Começar com/ }).click();
+ await page.getByRole("dialog", { name: "Escolha seu Eco inicial" }).waitFor({ state: "hidden" });
+ await page.evaluate(async () => {
+  const a = window.ng.getComponent(document.querySelector("ww-app"));
+  const { MemoryStore } = await import("/functions/src/memory-store.ts");
+  const { LiveOpsService } = await import("/src/app/domain/online-engine/live-ops-service.ts");
+  const store = new MemoryStore(); await store.seed("users/live-gm-test", { role: "admin" });
+  const service = new LiveOpsService(store);
+  const clean = v => Object.fromEntries(Object.entries(v).filter(([key]) => !["updatedAt", "updatedBy", "auditId"].includes(key)));
+  a.onlinePanel.liveOpsCall = async request => {
+   const result = await service.execute("live-gm-test", request);
+   a.receiveLiveContent({ accessories: store.all("shop_accessories/").map(clean), balance: store.all("eco_balance/").map(clean), badges: store.all("badge_definitions/").map(clean) });
+   a.playerBadges.set(store.all("users/live-gm-test/badges/"));
+   return result;
+  };
+  a.onlinePanel.liveOpsAudit = async () => store.all("content_audit/").map((v, i) => ({ ...v, id: String(i) }));
+  a.receiveGameMasterAccess(true);
+ });
+ await page.getByRole("button", { name: "GM", exact: true }).click();
+ const gm = page.getByRole("dialog", { name: "Painel Game Master", exact: true });
+ const editor = gm.locator("ww-live-ops-panel");
+ await editor.getByLabel("Motivo da alteração", { exact: true }).fill("Festival de boas-vindas");
+ await editor.locator("summary").filter({ hasText: "Acessórios da loja" }).click();
+ await editor.getByLabel("Nome do acessório", { exact: true }).fill("Coroa de evento");
+ await editor.getByLabel("Descrição do acessório", { exact: true }).fill("Um presente para celebrar a floresta.");
+ await editor.getByLabel("Preço em Sementes", { exact: true }).fill("25");
+ await editor.getByLabel("Modelo visual", { exact: true }).selectOption("crown");
+ await editor.getByRole("button", { name: "Salvar acessório", exact: true }).click();
+ await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).game().shopCatalog?.length === 1);
+ await editor.locator("summary").filter({ hasText: "Balanceamento dos Ecos" }).click();
+ await editor.getByLabel("PV base (20–200)", { exact: true }).fill("80");
+ await editor.getByLabel("Ataque (1–50)", { exact: true }).fill("17");
+ await editor.getByRole("button", { name: "Publicar balanceamento", exact: true }).click();
+ await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).game().balance?.WW001?.hp === 80);
+ await editor.locator("summary").filter({ hasText: "Badges de eventos e marcos" }).click();
+ await editor.getByLabel("Nome da badge", { exact: true }).fill("Pioneiro da floresta");
+ await editor.getByLabel("Descrição da badge", { exact: true }).fill("Participou do primeiro festival da floresta.");
+ await editor.getByRole("button", { name: "Salvar badge", exact: true }).click();
+ await editor.getByRole("status").filter({ hasText: "Operação confirmada" }).waitFor();
+ await editor.getByLabel("UID para conceder badge", { exact: true }).fill("live-gm-test");
+ await editor.getByRole("button", { name: "Conceder badge selecionada", exact: true }).click();
+ await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).playerBadges().length === 1);
+ for (const [width, height] of [[320,568],[390,844],[768,1024],[1360,900]]) {
+  await page.setViewportSize({ width, height });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  const box = await gm.boundingBox(); assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= width + 1 && box.height <= height + 1);
+  await editor.getByRole("button", { name: "Conceder badge selecionada", exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `artifacts/live-ops-gm-${width}.png` });
+ }
+ await gm.getByRole("button", { name: "Fechar ×", exact: true }).click();
+ await page.getByRole("button", { name: "Loja", exact: true }).click();
+ const item = page.locator(".store-item").filter({ has: page.getByRole("heading", { name: "Coroa de evento", exact: true }) });
+ await item.getByRole("button", { name: "25 ✦", exact: true }).click();
+ await item.getByRole("button", { name: "Equipado: Coroa de evento", exact: true }).waitFor();
+ const custom = await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).game().avatar.customAccessory);
+ assert.equal(custom.shape, "crown");
+ await item.getByRole("button", { name: "Equipado: Coroa de evento", exact: true }).click();
+ const wardrobe = page.getByRole("dialog", { name: "Mudar aparência", exact: true });
+ await wardrobe.locator(".custom-avatar-accessory[data-shape=crown]").waitFor();
+ await wardrobe.getByRole("button", { name: "Cancelar", exact: true }).click();
+ await page.keyboard.press("Escape");
+ await page.getByRole("button", { name: "Abrir menu da expedição", exact: true }).click();
+ await page.getByRole("region", { name: "Badges do Guardião", exact: true }).getByText("Pioneiro da floresta", { exact: true }).waitFor();
+ assert.equal(await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).game().avatar.customAccessory.id), custom.id);
+ assert.deepEqual(errors, []);
+ console.log("Live GM passed: published accessory, shop purchase/equipment/preview, balance update, badge creation/grant/display, four responsive sizes.");
+} catch (error) { console.log(await page.evaluate(() => ({ text: document.body.innerText.slice(-1800), errors: [] })).catch(() => null)); throw error; }
+finally { await browser.close(); }

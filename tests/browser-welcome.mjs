@@ -1,0 +1,81 @@
+import { chromium } from "playwright";
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+const base = process.env.BASE_URL ?? "http://127.0.0.1:5173";
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true });
+const context = await browser.newContext({ reducedMotion: "reduce" });
+await context.route(/https:\/\/.*googleapis.com\//, route => route.abort());
+const page = await context.newPage();
+const errors = [];
+page.on("pageerror", error => errors.push(error.message));
+try {
+  await mkdir("artifacts", { recursive: true });
+  await page.goto(base);
+  await page.locator("ww-welcome-page h1").waitFor();
+  await page.waitForFunction(() => !!window.ng?.getComponent(document.querySelector("ww-app")));
+  assert.equal(await page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === "wildwoods-writer")), false, "a fresh presentation must not reserve the expedition");
+  const restored = await page.evaluate(() => {
+    const app = window.ng.getComponent(document.querySelector("ww-app"));
+    let cloudCalls = 0;
+    app.receiveAccount({ profile: { uid: "restored-test", name: "Guardiã", email: "restored@example.invalid", photoURL: null }, cloud: async () => { cloudCalls++; throw new Error("Cloud must wait for game entry"); } });
+    const result = { uid: app.profile()?.uid, sessionOpened: !!app.session, cloudCalls };
+    app.receiveAccount(null);
+    return result;
+  });
+  assert.deepEqual(restored, { uid: "restored-test", sessionOpened: false, cloudCalls: 0 }, "restoring authentication on the presentation must defer save access");
+  const cta = () => page.getByRole("button", { name: "Começar minha jornada", exact: true }).first();
+  for (const [width, height] of [[320,568],[390,844],[768,1024],[1024,768],[1440,1000],[1920,1080]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${width}`);
+    assert.equal(await page.getByRole("dialog").count(), 0, "game dialogs must stay outside the landing accessibility tree");
+    assert.ok(await cta().evaluate(el => el.getBoundingClientRect().height >= 44));
+    await page.screenshot({ path: `artifacts/welcome-${width}.png`, fullPage: true });
+  }
+  const second = await context.newPage();
+  await second.goto(new URL("/jogar", base).href);
+  await second.waitForFunction(() => window.ng?.getComponent(document.querySelector("ww-app"))?.loaded());
+  assert.equal(await second.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).readonly()), false, "the presentation tab must not block another game tab");
+  await cta().click();
+  await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).readonly());
+  assert.equal(await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).loaded()), false, "a second game must not open its save without the writer lock");
+  await second.close();
+  await page.waitForFunction(async () => !(await navigator.locks.query()).held.some(lock => lock.name === "wildwoods-writer"));
+  await page.getByRole("button", { name: "Voltar à apresentação" }).click();
+  await cta().click();
+  await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).loaded());
+  await page.waitForURL("**/entrar");
+  await page.getByRole("heading", { name: "Entre na floresta" }).waitFor();
+  assert.equal(await page.locator("ww-welcome-page").count(), 0);
+  await page.getByRole("button", { name: "Voltar à apresentação" }).click();
+  await page.locator("ww-welcome-page h1").waitFor();
+  await page.goBack();
+  await page.getByRole("heading", { name: "Entre na floresta" }).waitFor();
+  await page.goForward();
+  await page.locator("ww-welcome-page h1").waitFor();
+  await page.evaluate(() => {
+    const app = window.ng.getComponent(document.querySelector("ww-app"));
+    app.receiveAccount = () => {};
+    app.profile.set({ uid: "welcome-test", name: "Guardiã", email: "welcome@example.invalid", photoURL: null });
+    app.cloudStatus.set("saved");
+  });
+  const before = await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).game().revision);
+  await page.keyboard.press("w");
+  assert.equal(await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).game().revision), before, "landing keyboard must not control the hidden game");
+  await page.getByRole("button", { name: "Continuar minha jornada", exact: true }).first().click();
+  await page.waitForURL("**/jogar");
+  assert.equal(await page.getByRole("heading", { name: "Entre na floresta" }).count(), 0);
+  await page.getByRole("button", { name: "Começar a jornada", exact: false }).click();
+  await page.getByRole("button", { name: /Começar com/ }).click();
+  await page.getByRole("dialog", { name: "Escolha seu Eco inicial" }).waitFor({ state: "hidden" });
+  await page.locator("canvas").waitFor({ state: "visible" });
+  const game = await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).game());
+  await page.getByRole("link", { name: "Choravia, início", exact: true }).click();
+  await page.locator("ww-welcome-page h1").waitFor();
+  await page.getByRole("button", { name: "Continuar minha jornada", exact: true }).first().click();
+  assert.deepEqual(await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).game()), game, "presentation navigation must preserve the expedition");
+  assert.deepEqual(errors, []);
+  console.log("Welcome passed: presentation without writer lock, two-tab protection/recovery, six responsive sizes, login/authenticated routes, browser history, hidden game controls and expedition preservation.");
+} catch (error) {
+  console.log({ url: page.url(), errors, state: await page.evaluate(() => ({ presentation: window.ng?.getComponent(document.querySelector("ww-app"))?.presentation(), text: document.body.innerText.slice(0, 500) })).catch(() => null) });
+  throw error;
+} finally { await browser.close(); }

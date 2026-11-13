@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": ".test-build",
+    "types": ["node"]
+  },
+  "include": [
+    "src/app/domain/**/*.ts",
+    "src/app/application/**/*.ts",
+    "src/app/adapters/save.ts",
+    "tests/**/*.ts",
+    "functions/src/service.ts",
+    "functions/src/model.ts",
+    "functions/src/store.ts",
+    "functions/src/memory-store.ts",
+    "functions/src/validation.ts"
+  ]
+}
