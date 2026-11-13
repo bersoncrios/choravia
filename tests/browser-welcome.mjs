@@ -29,6 +29,11 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${width}`);
     assert.equal(await page.getByRole("dialog").count(), 0, "game dialogs must stay outside the landing accessibility tree");
     assert.ok(await cta().evaluate(el => el.getBoundingClientRect().height >= 44));
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.mouse.move(width / 2, height / 2);
+    await page.mouse.wheel(0, 500);
+    await page.waitForFunction(() => window.scrollY > 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `artifacts/welcome-${width}.png`, fullPage: true });
   }
   const second = await context.newPage();
@@ -45,6 +50,7 @@ try {
   await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).loaded());
   await page.waitForURL("**/entrar");
   await page.getByRole("heading", { name: "Entre na floresta" }).waitFor();
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).overflowY), "hidden", "the active login dialog must still lock background scrolling");
   assert.equal(await page.locator("ww-welcome-page").count(), 0);
   await page.getByRole("button", { name: "Voltar à apresentação" }).click();
   await page.locator("ww-welcome-page h1").waitFor();
