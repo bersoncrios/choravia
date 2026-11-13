@@ -93,7 +93,7 @@ interface Preferences {
     @if (!profile()) {
       <section class="account-gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
         <div class="account-gate-card">
-          <span class="brand-mark">✳</span>
+          <img class="brand-mark brand-logo" src="/brand/choravia-mark.png" width="48" height="48" alt="" />
           <p class="eyebrow">SUA JORNADA COMEÇA COM VOCÊ</p>
           <h1 id="gate-title">Entre na floresta</h1>
           <p>Crie ou entre com sua conta Google para começar. Seu personagem e sua jornada ficam salvos na sua conta.</p>
@@ -214,7 +214,7 @@ interface Preferences {
     }
     <header class="masthead" [attr.inert]="sidePanel() ? '' : null">
       <a class="wordmark" href="/" (click)="$event.preventDefault(); showPresentation()" aria-label="Choravia, início"
-        ><span class="brand-mark">✳</span> CHORA<span>VIA</span
+        ><img class="brand-mark brand-logo" src="/brand/choravia-mark.png" width="48" height="48" alt="" /> CHORA<span>VIA</span
         ><sup>ALPHA 01</sup></a
       >
       <div class="header-right">

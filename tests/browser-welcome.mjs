@@ -12,6 +12,11 @@ try {
   await mkdir("artifacts", { recursive: true });
   await page.goto(base);
   await page.locator("ww-welcome-page h1").waitFor();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("ww-welcome-page img")).every(img => img.complete && img.naturalWidth > 0));
+  for (const path of ["/favicon-32.png", "/favicon-192.png", "/apple-touch-icon.png"]) {
+    const response = await page.request.get(new URL(path, base).href);
+    assert.ok(response.ok() && response.headers()["content-type"]?.includes("image/png"), `brand asset must load: ${path}`);
+  }
   await page.waitForFunction(() => !!window.ng?.getComponent(document.querySelector("ww-app")));
   assert.equal(await page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === "wildwoods-writer")), false, "a fresh presentation must not reserve the expedition");
   const restored = await page.evaluate(() => {
