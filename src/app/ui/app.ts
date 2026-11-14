@@ -1,3 +1,11 @@
+import { DEFAULT_AUDIO_MIX, normalizeAudioMix, type AudioMix, type AudioChannel, type AudioCue } from "../domain/audio.js";
+import { commandSound, battleFrameSound, levelIncreased } from "../application/audio-feedback.js";
+import { fieldMechanisms, fieldMechanismReady } from "../domain/field-abilities.js";
+import { JournalPanelComponent } from "./journal-panel.js";
+import { FieldPanelComponent } from "./field-panel.js";
+import { FieldSession } from "../application/field-session.js";
+import { fieldCycle, type FieldAction, type FieldState } from "../domain/field.js";
+import { fieldPoints, fieldAvailable } from "../domain/field-world.js";
 import { SyncModalComponent, type SyncModalState } from "./sync-modal/sync-modal.js";
 import { SaveToastComponent } from "./save-toast/save-toast.js";
 import { LiveOpsPanelComponent } from "./live-ops-panel.js";
@@ -14,6 +22,7 @@ import {
   ViewChild,
   signal,
   inject,
+  effect,
 } from "@angular/core";
 import {
   Game,
@@ -75,6 +84,7 @@ import {
   type SkinTone,
 } from "../domain/avatar.js";
 interface Preferences {
+  audio: AudioMix;
   sound: boolean;
   reduced: boolean;
   timing: boolean;
@@ -82,7 +92,7 @@ interface Preferences {
 @Component({
   selector: "ww-app",
   standalone: true,
-  imports: [OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent, SyncModalComponent, SaveToastComponent],
+  imports: [JournalPanelComponent, FieldPanelComponent, OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent, SyncModalComponent, SaveToastComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
   <ww-sync-modal [state]="syncModalState()" (exportState)="exportSave()" (retry)="retrySyncModal()" />
@@ -317,9 +327,15 @@ interface Preferences {
               <span class="eyebrow">PRÓXIMO PASSO</span>
               <strong>{{ objective().title }}</strong>
               <p>{{ objective().detail }}</p>
+              @if (fieldState(); as bag) {
+                <div class="field-mission-tracker"><span>✧ {{ bag.restored ? 'Marco de Iara restaurado' : bag.inventory.lantern ? 'Uma luz para Iara · entregue a lanterna no marco' : 'Uma luz para Iara · reúna 2 ervas e 2 seivas' }}</span><button class="quiet-button" (click)="openSidePanel('backpack')">Ver missão</button></div>
+              }
             </div>
           }
           @if (battleView().battle; as b) {
+            @if (b.rematch; as training) {
+              <div class="training-objective" role="status"><strong>REVANCHE DE TREINO · {{ training.goal === 'skill' ? 'Vença usando uma habilidade' : 'Vença após defender ao menos uma vez' }}</strong><p>{{ (training.goal === 'skill' ? training.usedSkill : training.usedGuard) ? '✓ Ação do objetivo realizada; conclua com vitória.' : 'Experimente a estratégia indicada nesta luta.' }} Sem Sementes, XP, captura ou progresso das Trilhas.</p></div>
+            }
             <div class="turn-banner" role="status" aria-live="polite" [attr.data-phase]="turnPhase()">
               <div><strong>{{ battleView().scene === 'result' ? 'Batalha encerrada' : busy() && turnPhase() === 'choice' ? 'Confirmando sua ação…' : turnPhase() === 'choice' ? 'Sua vez — escolha uma ação' : turnPhase() === 'player' ? 'Resolvendo sua ação' : 'Vez do adversário' }}</strong>
               <p>{{ battleView().scene === 'result' ? battleView().message : turnPhase() === 'choice' ? (classicBattle() ? 'Uma ação por rodada. Depois, o adversário responde.' : 'Combate tático salvo: mova e escolha uma ação.') : battleView().message }}</p></div>
@@ -520,6 +536,30 @@ interface Preferences {
                 </p>
               </div>
               <div class="context-actions">
+              @if (nearEnvironmentMechanism(); as mechanism) {
+                <section class="environment-controls" [attr.aria-label]="mechanism.name">
+                  <strong>{{ mechanism.name }} · {{ elementNames[mechanism.element] }}</strong>
+                  @if (environmentCompleted(mechanism.id)) {
+                    <p class="environment-status" role="status">✓ {{ mechanism.completedText }}</p>
+                  } @else {
+                    <p>{{ mechanism.description }}</p>
+                    <button class="quiet-button environment-action" [disabled]="busy() || !loaded() || !environmentEcoReady(mechanism)" (click)="send({type: 'restoreEnvironment', id: mechanism.id, method: 'eco'})">{{ mechanism.ecoLabel }} · {{ elementNames[mechanism.element] }} <kbd>E</kbd></button>
+                    <button class="quiet-button environment-action" [disabled]="busy() || !loaded()" (click)="send({type: 'restoreEnvironment', id: mechanism.id, method: 'manual'})">{{ mechanism.manualLabel }} · alternativa gratuita</button>
+                    @if (!environmentEcoReady(mechanism)) { <small>Use um Eco saudável de {{ elementNames[mechanism.element] }} ou resolva manualmente. O resultado é o mesmo.</small> }
+                  }
+                </section>
+              }
+
+              @if (nearFieldPoint(); as point) {
+                <button class="quiet-button" [disabled]="fieldBusy() || busy() || !fieldState() || !!fieldError() || !fieldPointAvailable(point.id)" (click)="collectField()">
+                  {{ point.symbol }} {{ point.name }} · {{ fieldPointAvailable(point.id) ? (point.id === 'treasure' ? 'Abrir · +1 cristal' : point.id === 'cache' ? 'Buscar · +1 erva e +1 fruto' : 'Coletar · +2 na mochila') : (point.id === 'treasure' ? 'Baú aberto' : 'Recolhido · renova no próximo ciclo') }} <kbd>E</kbd>
+                </button>
+              }
+              @if (canRestoreField() && fieldState() && !fieldState()!.restored) {
+                <button class="quiet-button" (click)="fieldAction({type: 'restore'})" [disabled]="fieldBusy() || busy() || !fieldState()!.inventory.lantern">✧ Entregar lanterna a Iara</button>
+              }
+              <button class="quiet-button" (click)="openSidePanel('backpack')">Mochila e missão</button>
+
               @if (nearPortal()) {
                 <p class="portal-route" aria-live="polite">→ Esta porta só leva à {{ nextRegionName() }}.</p>
               }
@@ -536,12 +576,13 @@ interface Preferences {
               @if (nearRival()) {
                 <button
                   class="quiet-button"
-                  [disabled]="busy() || !loaded() || rivalWon()"
-                  (click)="send({ type: 'challengeNpc', npcId: nearbyNpc()?.id })"
+                  [disabled]="busy() || !loaded() || active().hp <= 0"
+                  (click)="send(rivalWon() ? { type: 'rematchNpc', npcId: nearbyNpc()?.id } : { type: 'challengeNpc', npcId: nearbyNpc()?.id })"
                 >
-                  {{ rivalWon() ? nearbyNpc()?.name + " · duelo concluído" : "Desafiar " + nearbyNpc()?.name + " · +" + nearbyNpc()?.reward + " Sementes" }}
+                  {{ rivalWon() ? "Revanche de treino · " + nearbyNpc()?.name : "Desafiar " + nearbyNpc()?.name + " · +" + nearbyNpc()?.reward + " Sementes" }}
                 </button>
               }
+              @if (nearRival() && rivalWon()) { <p class="training-note">Treino livre: sem Sementes, XP, captura ou Trilhas do dia. Registre vitórias, estratégia e melhor rodada.</p> }
               @if (nearPot()) {
                 <button
                   class="quiet-button"
@@ -579,6 +620,8 @@ interface Preferences {
         </section>
 
       </div>
+      @if (fieldMessage()) { <p class="field-feedback" role="status">{{ fieldMessage() }}</p> }
+      @if (fieldError()) { <p class="field-feedback online-error" role="alert">{{ fieldError() }} <button (click)="refreshField()" [disabled]="fieldBusy()">Conferir mochila</button></p> }
       @if (error()) {
         <div class="error-box" role="alert">
           <p>{{ error() }}</p>
@@ -590,11 +633,15 @@ interface Preferences {
         <section id="expedition-drawer" class="expedition-drawer" [attr.role]="sidePanel() ? 'dialog' : null" [attr.aria-modal]="sidePanel() ? 'true' : null" aria-label="Menu da expedição" (click)="$event.stopPropagation()" [attr.inert]="collectionOpen() || settings() || storeOpen() || gameMasterOpen() || avatarEditorOpen() ? '' : null">
           <div class="drawer-heading"><div><p class="eyebrow">SEU CADERNO DE AVENTURAS</p><h2>Menu da expedição</h2></div><button (click)="closeSidePanel()" aria-label="Fechar menu da expedição">Fechar ×</button></div>
           <nav class="drawer-navigation" aria-label="Painéis da expedição">
+            <button (click)="openSidePanel('journal')" [attr.aria-pressed]="sidePanel() === 'journal'">Mapa e diário</button>
+            <button (click)="openSidePanel('backpack')" [attr.aria-pressed]="sidePanel() === 'backpack'">Mochila e missão</button>
             <button (click)="openSidePanel('companion')" [attr.aria-pressed]="sidePanel() === 'companion'">Companheiro</button>
             <button (click)="openSidePanel('daily')" [attr.aria-pressed]="sidePanel() === 'daily'">Trilhas do dia</button>
             <button (click)="openSidePanel('account')" [attr.aria-pressed]="sidePanel() === 'account'">Conta e trocas</button>
           </nav>
           <div class="drawer-content">
+            <ww-journal-panel [style.display]="sidePanel() === 'journal' ? null : 'none'" [game]="game()" [restored]="fieldState()?.restored ?? null" />
+            <ww-field-panel [style.display]="sidePanel() === 'backpack' ? null : 'none'" [state]="fieldState()" [busy]="fieldBusy()" [error]="fieldError()" [now]="fieldNow()" [canRestore]="canRestoreField()" [canAct]="!busy() && game().scene === 'exploration' && connectionAvailable() && !readonly()" (action)="fieldAction($event)" (refresh)="refreshField()" />
         <aside class="journey-panel" aria-label="Sua expedição" [style.display]="sidePanel() === 'companion' ? null : 'none'">
           <p class="eyebrow">SEU COMPANHEIRO</p>
           <div
@@ -798,8 +845,15 @@ interface Preferences {
               [checked]="prefs().sound"
               (change)="togglePref('sound')"
             />
-            Sons da floresta</label
-          ><label
+            Sons da floresta</label>
+          <section class="audio-settings" aria-label="Volumes do jogo">
+            <p>Ambientes por região, música e efeitos. Cada volume pode ser ajustado separadamente.</p>
+            @for (channel of audioChannels; track channel.id) {
+              <label class="audio-volume"><span>{{ channel.label }} <output>{{ audioVolume(channel.id) }}%</output></span><input type="range" min="0" max="100" step="1" [attr.aria-label]="channel.label" [attr.aria-valuetext]="audioVolume(channel.id) + '%'" [value]="audioVolume(channel.id)" (input)="setAudioVolume(channel.id, $event)" /></label>
+            }
+            <button class="quiet-button" (click)="previewAudio()" [disabled]="!prefs().sound">Ouvir prévia</button>
+            <small>{{ prefs().sound ? 'Ao voltar ao jogo, toque em um controle para retomar o som.' : 'Ative Sons da floresta para ouvir. As informações do jogo também aparecem na tela.' }}</small>
+          </section><label
             ><input
               type="checkbox"
               [checked]="prefs().reduced"
@@ -909,14 +963,15 @@ interface Preferences {
   </div>`,
 })
 export class AppComponent implements AfterViewInit, OnDestroy {
-  readonly sidePanel = signal<"companion" | "daily" | "account" | null>(null);
+  readonly sidePanel = signal<"companion" | "daily" | "account" | "backpack" | "journal" | null>(null);
   private sidePanelTrigger: HTMLElement | null = null;
-  openSidePanel(panel: "companion" | "daily" | "account"): void {
+  openSidePanel(panel: "companion" | "daily" | "account" | "backpack" | "journal"): void {
     if (!this.sidePanel()) this.sidePanelTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.release();
     this.finishPlayback();
     this.ritual.set(false);
     this.sidePanel.set(panel);
+    if (panel === "backpack") void this.refreshField();
     requestAnimationFrame(() => document.querySelector<HTMLElement>('.drawer-navigation button[aria-pressed="true"]')?.focus());
   }
   closeSidePanel(): void {
@@ -1013,6 +1068,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     } else this.selection.set(type);
   }
   finishPlayback(): void {
+    if (this.pendingLevelSound) { this.pendingLevelSound = false; this.playAudioCue("level"); }
     for (const timer of this.playbackTimers) clearTimeout(timer);
     this.playbackTimers = [];
     this.playbackView.set(null);
@@ -1028,6 +1084,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     const show = (index: number): void => {
       this.turnPhase.set(index === 0 ? "player" : "enemy");
       this.playbackView.set(views[index]!);
+      const sound = battleFrameSound(frames[index]!, after);
+      if (sound) this.playAudioCue(sound.cue, sound.variant);
       const frameCommand: Command = index === 0 ? command : { type: frames[index]!.action === "skill" ? "skill" : "basic", target: before.battle!.ally.pos };
       this.renderer?.play(index === 0 ? before : views[0]!, views[index]!, frameCommand, performance.now(), index === 0 ? "ally" : "enemy");
     };
@@ -1133,6 +1191,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   readonly ritualConfirmed = signal(false);
   private readonly systemMotion = matchMedia("(prefers-reduced-motion: reduce)");
   readonly prefs = signal<Preferences>({
+    audio: { ...DEFAULT_AUDIO_MIX },
     sound: false,
     reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
     timing: false,
@@ -1141,6 +1200,102 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private repository: IndexedDbSave | null = null;
   private renderer: Renderer | null = null;
   private audio = new GameAudio();
+  readonly audioVisible = signal(!document.hidden);
+  readonly audioChannels: readonly {id: AudioChannel; label: string}[] = [
+    {id: "master", label: "Volume geral"}, {id: "music", label: "Música"}, {id: "ambience", label: "Ambiente"}, {id: "effects", label: "Efeitos"},
+  ];
+  private pendingLevelSound = false;
+  refreshAudioScene(): void {
+    const prefs = this.prefs(), game = this.game();
+    this.audio.configure(prefs.sound, prefs.audio);
+    this.audio.setScene({region: game.region ?? "clearing", battle: this.battleView().scene === "battle", active: this.audioVisible() && !this.presentation() && !!this.profile() && this.loaded() && !!game.avatar && !this.hasUnchosenStarter() && !this.readonly() && !this.switchingAccount() && this.connectionAvailable()});
+  }
+  @HostListener("document:pointerdown") activateAudioFromGesture(): void {
+    if (!this.prefs().sound || this.presentation() || document.hidden) return;
+    this.refreshAudioScene();
+    this.audio.unlock();
+  }
+  previewAudio(): void {
+    if (!this.prefs().sound) return;
+    this.activateAudioFromGesture(); this.playAudioCue("confirm");
+  }
+  private playAudioCue(cue: AudioCue, variant?: string): void {
+    if (this.prefs().sound && !document.hidden && !this.presentation()) this.audio.cue(cue, variant);
+  }
+  audioVolume(channel: AudioChannel): number { return Math.round(this.prefs().audio[channel] * 100); }
+  setAudioVolume(channel: AudioChannel, event: Event): void {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const value = Number(input.value);
+    if (!Number.isFinite(value)) return;
+    this.prefs.update(p => ({...p, audio: normalizeAudioMix({...p.audio, [channel]: value / 100})}));
+    this.savePreferences(); this.refreshAudioScene(); this.activateAudioFromGesture();
+  }
+  readonly fieldState = signal<FieldState | null>(null);
+  readonly fieldNow = signal<number | null>(null);
+  readonly fieldBusy = signal(false);
+  readonly fieldError = signal("");
+  readonly fieldMessage = signal("");
+  private fieldUid = "";
+  private fieldResetTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly field = new FieldSession(localStorage, () => {
+    this.fieldState.set(this.field.state); this.fieldNow.set(this.field.now);
+    this.fieldBusy.set(this.field.busy); this.fieldError.set(this.field.error); this.fieldMessage.set(this.field.message);
+  });
+  async refreshField(): Promise<void> {
+    const uid = this.profile()?.uid;
+    if (!uid || !this.onlinePanel || this.readonly() || this.switchingAccount()) return;
+    if (this.fieldUid !== uid || !this.field.state && !this.field.busy && !this.field.error) {
+      try { this.field.bind(uid, this.onlinePanel.fieldGateway()); this.fieldUid = uid; }
+      catch (error) { this.fieldError.set(error instanceof Error ? error.message : "Aguarde a conta."); return; }
+    }
+    await this.field.refresh();
+    if (this.profile()?.uid !== uid || this.destroyed) return;
+    clearTimeout(this.fieldResetTimer);
+    if (this.field.now !== null && !this.field.error) {
+      const remaining = (fieldCycle(this.field.now) + 1) * 86400000 - this.field.now;
+      this.fieldResetTimer = setTimeout(() => { if (!this.destroyed && this.profile()?.uid === uid) void this.refreshField(); }, remaining + 500);
+    }
+  }
+  nearEnvironmentMechanism() {
+    if (this.game().scene !== "exploration") return null;
+    return fieldMechanisms(this.game()).filter(m => distance(m, this.game().player) <= 1).sort((a, b) => distance(a, this.game().player) - distance(b, this.game().player))[0] ?? null;
+  }
+  environmentCompleted(id: string): boolean { return (this.game().fieldRestorations ?? []).includes(id); }
+  environmentEcoReady(mechanism: ReturnType<typeof fieldMechanisms>[number]): boolean { return fieldMechanismReady(this.game(), mechanism); }
+  nearFieldPoint() {
+    if (this.game().scene !== "exploration" || this.fieldNow() === null) return null;
+    const nearby = fieldPoints(this.game(), fieldCycle(this.fieldNow()!)).filter(p => distance(p, this.game().player) <= 1);
+    nearby.sort((a, b) => distance(a, this.game().player) - distance(b, this.game().player) || Number(this.fieldPointAvailable(b.id)) - Number(this.fieldPointAvailable(a.id)));
+    return nearby[0] ?? null;
+  }
+  fieldPointAvailable(id: Parameters<typeof fieldAvailable>[1]): boolean {
+    return !!this.fieldState() && this.fieldNow() !== null && fieldAvailable(this.fieldState()!, id, fieldCycle(this.fieldNow()!));
+  }
+  canRestoreField(): boolean { return this.game().scene === "exploration" && (this.game().region ?? "clearing") === "clearing" && distance(this.game().player, {x: 7,y: 10}) <= 1; }
+  async collectField(): Promise<void> {
+    const point = this.nearFieldPoint();
+    if (!point || !this.fieldPointAvailable(point.id)) return;
+    await this.fieldAction(point.id === "treasure" ? {type: "treasure"} : {type: "gather", node: point.id});
+  }
+  async fieldAction(action: FieldAction): Promise<void> {
+    if (!this.loaded() || !this.profile() || this.readonly() || this.busy() || this.switchingAccount() || !this.connectionAvailable() || this.cloudStatus() === "conflict" || this.game().scene !== "exploration" || !this.game().avatar || this.hasUnchosenStarter()) return;
+    if (this.accountAccess && !this.accountSynchronized()) return;
+    if (action.type === "restore" && !this.canRestoreField()) return;
+    if (action.type === "gather" || action.type === "treasure") {
+      const point = this.nearFieldPoint();
+      if (!point || point.id !== (action.type === "treasure" ? "treasure" : action.node)) return;
+    }
+    this.release();
+    const previous = this.fieldState();
+    await this.field.perform(action);
+    const current = this.fieldState();
+    if (previous && current && !this.fieldError()) {
+      if (action.type === "restore" && !previous.restored && current.restored) this.playAudioCue("restore");
+      else if (Object.keys(current.inventory).some(key => current.inventory[key as keyof FieldState["inventory"]] > previous.inventory[key as keyof FieldState["inventory"]])) this.playAudioCue(action.type === "craft" ? "confirm" : "collect");
+    }
+  }
+
   private frame = 0;
   private held: { dx: number; dy: number } | null = null;
   private lastWalk = 0;
@@ -1168,10 +1323,11 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         "timing" in saved &&
         typeof saved.timing === "boolean"
       )
-        this.prefs.set(saved as Preferences);
+        this.prefs.set({sound: saved.sound, reduced: saved.reduced, timing: saved.timing, audio: normalizeAudioMix("audio" in saved ? saved.audio : undefined)});
     } catch {
       /* Use defaults. */
     }
+    effect(() => this.refreshAudioScene());
   }
   ngAfterViewInit(): void {
     try {
@@ -1216,6 +1372,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           now,
           this.prefs().reduced || this.systemMotion.matches,
           this.selection(),
+          { state: this.fieldState(), cycle: this.fieldNow() === null ? -1 : fieldCycle(this.fieldNow()!) },
         );
         this.frame = requestAnimationFrame(tick);
       };
@@ -1292,6 +1449,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         command.type === "breakPot" ||
         command.type === "chooseStarter" ||
         command.type === "challengeNpc" ||
+        command.type === "rematchNpc" ||
+        command.type === "restoreEnvironment" ||
         command.type === "purchase"
       )
         return;
@@ -1313,7 +1472,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (!this.session || !this.loaded() || this.ritual() || this.readonly())
       return;
     const before = this.game();
-    if (command.type === "activate" ? this.creatureLocked(command.id) : this.creatureLocked(before.activeId) && (command.type === "challengeNpc" || command.type === "walk" && reduceGame(before, command).scene === "battle")) {
+    if (command.type === "activate" ? this.creatureLocked(command.id) : this.creatureLocked(before.activeId) && (command.type === "challengeNpc" || command.type === "rematchNpc" || command.type === "restoreEnvironment" && command.method === "eco" || command.type === "walk" && reduceGame(before, command).scene === "battle")) {
       this.expeditionError.set("Este Eco está reservado em uma troca ou batalha anterior. Conclua a operação ou escolha outro Eco.");
       return;
     }
@@ -1332,12 +1491,6 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (this.session.ready && this.game() !== before && (command.type !== "walk" || this.game().scene === "battle"))
       this.cloud?.observe(true);
     if (this.game() !== before) {
-      if (
-        command.type !== "walk" &&
-        command.type !== "move" &&
-        this.prefs().sound
-      )
-        this.audio.play(this.game().battle?.result === "capture");
       if (command.type === "move") this.selection.set("basic");
       if (
         this.game().battle?.round !== before.battle?.round ||
@@ -1351,6 +1504,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     const after = this.game();
     if (before === after) return;
     const staged = this.playTurn(before, after, command);
+    if (staged) this.pendingLevelSound = levelIncreased(before, after);
+    else { const sound = commandSound(before, after, command); if (sound) this.playAudioCue(sound.cue, sound.variant); }
     if (!staged && !document.hidden) this.renderer?.play(before, after, command, performance.now());
     const feedback = visualFeedback(before, after, command);
     const label = progressFeedback(before, after) || (feedback?.kind === "world" ? feedback.label : "");
@@ -1667,6 +1822,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.expeditionError.set("");
     this.sidePanel.set(null);
     this.avatarEditorOpen.set(false); this.storeOpen.set(false); this.settings.set(false); this.collectionOpen.set(false);
+    clearTimeout(this.fieldResetTimer);
+    this.field.bind("", null); this.fieldUid = "";
     const epoch = ++this.accountEpoch,
       previous = this.session,
       previousUid = this.sessionUid;
@@ -1747,7 +1904,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       );
       this.cloud = cloud;
       await cloud.start();
-      if (epoch === this.accountEpoch) void this.refreshDailyBoard();
+      if (epoch === this.accountEpoch) { void this.refreshDailyBoard(); void this.refreshField(); }
     } catch (error) {
       if (epoch !== this.accountEpoch) return;
       this.switchingAccount.set(false);
@@ -1815,14 +1972,17 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     await this.cloud?.retry();
     void this.retryExpedition();
     void this.refreshDailyBoard();
+    if (this.accountAccess && this.fieldUid) void this.refreshField();
   }
   @HostListener("window:focus") async refreshCloud(): Promise<void> {
     if (this.cloud?.status !== "conflict") await this.cloud?.retry();
     void this.flushDailyActions();
     if (!this.accountSynchronized()) void this.synchronizeAccountExpedition();
     void this.refreshDailyBoard();
+    if (this.accountAccess && this.fieldUid) void this.refreshField();
   }
   @HostListener("window:pagehide") saveOnHide(): void {
+    this.audioVisible.set(false); this.refreshAudioScene();
     void this.cloud?.flush();
   }
   @HostListener("window:offline") pauseDisconnected(): void {
@@ -2162,6 +2322,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   @HostListener("document:keydown", ["$event"]) keydown(
     e: KeyboardEvent,
   ): void {
+    if (!e.repeat) this.activateAudioFromGesture();
     if (this.presentation()) return;
     if (e.key === "Tab") {
       const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
@@ -2211,6 +2372,16 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         e.target.isContentEditable)
     )
       return;
+    const mechanism = this.nearEnvironmentMechanism();
+    if (e.key.toLowerCase() === "e" && mechanism && !this.environmentCompleted(mechanism.id)) {
+      e.preventDefault();
+      if (!e.repeat) void this.send({type: "restoreEnvironment", id: mechanism.id, method: this.environmentEcoReady(mechanism) ? "eco" : "manual"});
+      return;
+    }
+    const fieldPoint = this.nearFieldPoint();
+    if (e.key.toLowerCase() === "e" && fieldPoint && this.fieldPointAvailable(fieldPoint.id)) {
+      e.preventDefault(); if (!e.repeat) void this.collectField(); return;
+    }
     if (e.key.toLowerCase() === "e" && this.nearAncientMarker()) {
       e.preventDefault();
       if (!e.repeat) void this.send({ type: "interact" });
@@ -2223,8 +2394,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     }
     if (e.key.toLowerCase() === "e" && this.nearRival()) {
       e.preventDefault();
-      if (!e.repeat && !this.rivalWon())
-        void this.send({ type: "challengeNpc" });
+      if (!e.repeat) void this.send(this.rivalWon() ? {type: "rematchNpc", npcId: this.nearbyNpc()?.id} : { type: "challengeNpc" });
       return;
     }
     const dirs: Record<string, readonly [number, number]> = {
@@ -2252,15 +2422,21 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   @HostListener("window:blur") blur(): void {
     this.release();
   }
+  @HostListener("window:pageshow") audioPageShown(): void { this.audioVisible.set(!document.hidden); this.refreshAudioScene(); }
   @HostListener("document:visibilitychange") visibility(): void {
+    this.audioVisible.set(!document.hidden); this.refreshAudioScene();
     this.finishPlayback();
     this.release();
     this.renderer?.resetMotion();
     this.feedbackNotices.set([]);
     this.ritualLast = 0;
   }
-  togglePref(key: keyof Preferences): void {
+  togglePref(key: "sound" | "reduced" | "timing"): void {
     this.prefs.update((p) => ({ ...p, [key]: !p[key] }));
+    this.savePreferences();
+    if (key === "sound") { this.refreshAudioScene(); if (this.prefs().sound) this.audio.unlock(); }
+  }
+  private savePreferences(): void {
     try {
       localStorage.setItem(
         "wildwoods-preferences",
@@ -2303,6 +2479,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     cancelAnimationFrame(this.frame);
     this.release();
     this.unlock?.();
+    clearTimeout(this.fieldResetTimer);
+    this.field.bind("", null);
     this.audio.close();
   }
 }

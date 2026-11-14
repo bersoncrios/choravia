@@ -37,10 +37,12 @@ export function visualFeedback(before: Game, after: Game, command: Command): Vis
   if (command.type === "purchase") label = "Peça adquirida";
   if (command.type === "customize") label = "Visual salvo";
   if (command.type === "applyDailyReward") label = "Recompensa recebida";
+  if (command.type === "restoreEnvironment") label = "Memória restaurada";
   return label ? { kind: "world", duration: 900, allyLoss: 0, enemyLoss: 0, enemyActs: false, label, worldPosition: after.player } : null;
 }
 
 export function progressFeedback(before: Game, after: Game): string {
+  if ((after.fieldRestorations?.length ?? 0) > (before.fieldRestorations?.length ?? 0)) return "Uma memória da floresta voltou a despertar!";
   const old = activeCreature(before), current = after.collection.find(c => c.id === old.id);
   if (current && creatureLevel(current) > creatureLevel(old)) return `${species(current.speciesId).name} · Nível ${creatureLevel(current)}!`;
   if (after.captured > before.captured) return "Novo vínculo formado!";

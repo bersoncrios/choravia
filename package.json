@@ -16,7 +16,11 @@
     "build:backend": "npm run build --workspace choravia-functions",
     "test:emulator": "ngc -p tsconfig.app.json && node --test tests/emulator/*.test.mjs",
     "test:welcome": "node tests/browser-welcome.mjs",
-    "test:live-ops": "node tests/browser-live-ops.mjs"
+    "test:live-ops": "node tests/browser-live-ops.mjs",
+    "test:field": "node tests/browser-field.mjs",
+    "test:journal": "node tests/browser-journal.mjs",
+    "test:activities": "node tests/browser-activities.mjs",
+    "test:audio": "node tests/browser-audio.mjs"
   },
   "dependencies": {
     "@angular/core": "20.3.34",

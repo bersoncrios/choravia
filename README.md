@@ -90,6 +90,23 @@ A raiz `/` apresenta Choravia, seu mundo e os cinco Ecos iniciais. **Começar mi
 
 O sistema visual compartilhado define cores, fontes locais, controles e layouts para celular, tablet e desktop. Veja [sistema visual](docs/UI_DESIGN_SYSTEM.md). `npm run test:welcome` verifica a apresentação e a navegação com identidades simuladas; os testes de jogo entram diretamente por `/jogar`.
 
-O botão **Menu** abre os painéis laterais **Companheiro**, **Trilhas do dia** e **Conta e trocas**, liberando a área principal para o mapa. Feche pelo botão, por Escape ou pelo fundo. A conta permanece conectada com o painel fechado.
+O botão **Menu** abre os painéis laterais **Mapa e diário**, **Mochila e missão**, **Companheiro**, **Trilhas do dia** e **Conta e trocas**, liberando a área principal para o mapa. Feche pelo botão, por Escape ou pelo fundo. A conta permanece conectada com o painel fechado.
 
 Administradores podem usar **GM → Conteúdo e eventos** para criar acessórios de broche/lenço/coroa com cor e preço, ajustar PV/ataque/defesa dos Ecos e criar/conceder badges de eventos ou marcos por UID. Badges aparecem no painel Companheiro. As alterações têm auditoria e revisão para conflitos entre GMs. Esta feature requer as novas Rules junto do frontend; veja [operação de conteúdo](docs/GM_LIVE_OPS.md) e `npm run test:live-ops`.
+
+
+## Coleta renovável e missão de campo
+
+Na clareira inicial, novos pontos de erva, fruto, seiva e cristal renovam às 00h UTC. Há um baú único que permanece aberto e um esconderijo que muda de lugar por ciclo. Pressione E perto de um ponto ou use o botão contextual. Vasos antigos deixam cacos e conservam suas recompensas já recebidas.
+
+Em **Menu → Mochila e missão**, reúna 2 ervas e 2 seivas, fabrique uma lanterna e entregue no marco de Iara para restaurar sua luz. Os novos materiais usam um ledger próprio da conta, recibos imutáveis e ciclos verificados pelas Rules, sem alterar o formato do save antigo. Esta entrega requer frontend e Rules compatíveis; não foi publicada. Veja [regras e limites](docs/FIELD_EXPLORATION.md), [diagnóstico e roadmap](docs/EVOLUTION_ROADMAP.md) e `npm run test:field`.
+
+
+**Menu → Mapa e diário** mostra o circuito das quatro regiões, locais visitados e o Diário dos Ecos. Encontros e duelos registram observações; as descobertas permanecem após trocas, enquanto o diário distingue as espécies da coleção atual. Saves antigos recuperam somente fatos ainda presentes no snapshot. Veja [diário de exploração](docs/EXPLORATION_JOURNAL.md) e `npm run test:journal`.
+
+
+## Atividades de campo e apresentação sonora
+
+Os cinco elementos ajudam a restaurar mecanismos nos mapas existentes; cada um também tem solução manual gratuita. A ponte restaurada da Gruta das Marés abre uma travessia opcional. **Mapa e diário → Atividades de campo** registra as memórias recuperadas e os treinos. Depois de vencer um duelista, ofereça uma revanche para registrar estratégia, vitórias e melhor rodada, sem repetir Sementes ou XP. Veja [habilidades e treino](docs/FIELD_ABILITIES_AND_TRAINING.md) e `npm run test:activities`.
+
+Em **Configurações**, ative **Sons da floresta** e ajuste **Volume geral**, **Música**, **Ambiente** e **Efeitos**. Os biomas e combates têm motivos sintetizados localmente; passos, ações e recompensas têm sons distintos. O som começa após uma interação e para quando a aba fica oculta ou a expedição deixa de estar ativa. Preferências antigas são preservadas. Veja [áudio e polimento visual](docs/AUDIO_AND_MAP_POLISH.md) e `npm run test:audio`.

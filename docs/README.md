@@ -60,3 +60,14 @@ O mundo agora tem quatro áreas conectadas por portais e cada save recebe posici
 - [Menu e painéis laterais da expedição](SIDE_PANELS.md)
 
 - [GM: acessórios da loja, balanceamento e badges](GM_LIVE_OPS.md)
+
+
+## Evolução do mundo — primeira entrega
+
+- [Diagnóstico e backlog priorizado da evolução](EVOLUTION_ROADMAP.md)
+- [Coleta renovável, mochila, receita e missão de Iara](FIELD_EXPLORATION.md)
+
+- [Diário dos Ecos, habitats e mapa de regiões](EXPLORATION_JOURNAL.md)
+
+- [Habilidades ambientais e revanche de treino](FIELD_ABILITIES_AND_TRAINING.md)
+- [Áudio, volumes e polimento dos mapas](AUDIO_AND_MAP_POLISH.md)

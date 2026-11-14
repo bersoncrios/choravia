@@ -1,4 +1,4 @@
-import { creatureLevel, creatureMaxHp, type Game, type Command } from "../domain/game.js";
+import { creatureLevel, creatureMaxHp, mergeJournals, type Game, type Command } from "../domain/game.js";
 import type { ValidatedCreature } from "../domain/online.js";
 import type { DailyContractType } from "../domain/daily-challenges.js";
 export interface CreatureMapping { sourceId: string; id: string | null }
@@ -17,10 +17,10 @@ export function reconcileExpedition(game: Game, inventory: ValidatedCreature[], 
   const desired = ids.get(game.activeId) ?? game.activeId;
   const activeMissing = !collection.some(c => c.id === desired);
   if (game.scene === "battle" && activeMissing) throw new Error("O Eco da batalha foi transferido. Sincronize antes de continuar; seu save foi preservado.");
-  return { ...game, ...(game.scene === "result" && activeMissing ? { scene: "exploration" as const, battle: null, message: "O Eco foi transferido em outra sessão. Sua expedição foi sincronizada e a batalha encerrada." } : {}), collection, captured: Math.max(game.captured, collection.length - 1), activeId: collection.some(c => c.id === desired) ? desired : (collection.find(c => c.hp > 0) ?? collection[0]!).id };
+  return { ...game, journal: mergeJournals(game, {...game, collection}), ...(game.scene === "result" && activeMissing ? { scene: "exploration" as const, battle: null, message: "O Eco foi transferido em outra sessão. Sua expedição foi sincronizada e a batalha encerrada." } : {}), collection, captured: Math.max(game.captured, collection.length - 1), activeId: collection.some(c => c.id === desired) ? desired : (collection.find(c => c.hp > 0) ?? collection[0]!).id };
 }
 export function dailyActionTypes(before: Game, after: Game, command: Command): DailyContractType[] {
-  if (before === after || before.scene !== "battle" || !before.battle) return [];
+  if (before === after || before.scene !== "battle" || !before.battle || !!before.battle.rematch) return [];
   const types: DailyContractType[] = [];
   if (command.type === "basic") types.push("basic-attack");
   if (command.type === "defend") types.push("defend-in-battle");
@@ -60,5 +60,5 @@ export function mergePreviousEncounter(world: Game, online: Game, result: Game):
     const hp = creature.id === result.activeId && result.battle ? result.battle.ally.hp : old?.hp ?? creature.hp;
     collection.set(creature.id, { ...old, ...creature, hp: Math.min(hp, creatureMaxHp(creature.speciesId, creatureLevel(creature), world.balance)) });
   }
-  return { ...world, collection: [...collection.values()], captured: Math.max(world.captured, online.captured) };
+  return { ...world, journal: mergeJournals(world, {...world, collection: [...collection.values()], battle: result.battle}), collection: [...collection.values()], captured: Math.max(world.captured, online.captured) };
 }

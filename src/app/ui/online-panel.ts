@@ -534,6 +534,7 @@ export class OnlinePanelComponent implements OnChanges, OnDestroy {
     this.unsubscribeContent = this.client.watchLiveContent(uid, value => { if (this.profile()?.uid === uid) this.contentChanged.emit(value); }, value => { if (this.profile()?.uid === uid) this.badgesChanged.emit(value); }, error => { if (this.profile()?.uid === uid) this.contentError.set(error.message); });
   }
   async liveOpsAudit() { if (!this.client) throw new Error("Aguarde a conexão da conta."); return this.client.liveOpsAudit(); }
+  fieldGateway() { if (!this.client) throw new Error("Aguarde a conexão da conta."); return this.client.fieldGateway(); }
   async liveOpsCall(request: LiveOpsRequest) {
     if (!this.client) throw new Error("Aguarde a conexão da conta.");
     return this.client.callLiveOps(request);

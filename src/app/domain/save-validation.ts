@@ -16,6 +16,7 @@ import {
 } from "./game.js";
 import { isAvatarAppearance } from "./avatar.js";
 import { isStoreItemId } from "./store.js";
+import { explorationTile, FIELD_MECHANISM_IDS } from "./field-abilities.js";
 const isRecord = (x: unknown): x is Record<string, unknown> =>
   !!x && typeof x === "object" && !Array.isArray(x);
 const int = (
@@ -27,6 +28,14 @@ const int = (
 const position = (x: unknown, maxX: number, maxY: number): boolean =>
   isRecord(x) && int(x["x"], 0, maxX) && int(x["y"], 0, maxY);
 const validSpecies = (x: unknown): boolean => SPECIES.some((s) => s.id === x);
+function validJournal(value: unknown): boolean {
+  if (!isRecord(value) || Object.keys(value).length !== 2) return false;
+  const regions = value["regions"], species = value["species"];
+  return Array.isArray(regions) && regions.length <= REGION_ORDER.length
+    && new Set(regions).size === regions.length && regions.every(id => REGION_ORDER.includes(id))
+    && Array.isArray(species) && species.length <= SPECIES.length
+    && new Set(species).size === species.length && species.every(validSpecies);
+}
 function validWorldLayouts(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value)) return false;
@@ -48,6 +57,15 @@ function validWorldLayouts(value: unknown): boolean {
   }
   return true;
 }
+function validTrainingRecords(value: unknown, game: Game): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || Object.keys(value).length > 20) return false;
+  const npcs = REGION_ORDER.flatMap(region=>layoutIn(game,region).npcs);
+  return Object.entries(value).every(([id,record])=>npcs.some(npc=>npc.id===id) && (game.npcDuelWins ?? []).includes(id)
+    && isRecord(record) && Object.keys(record).length===3 && int(record["wins"],1,9999) && int(record["bestRound"],1,40)
+    && Array.isArray(record["goals"]) && record["goals"].length<=2 && new Set(record["goals"]).size===record["goals"].length
+    && record["goals"].every(goal=>goal==="skill"||goal==="guard"));
+}
 /** Untrusted disk data is checked before it can become domain state. */
 export function isGame(value: unknown): value is Game {
   if (
@@ -61,6 +79,10 @@ export function isGame(value: unknown): value is Game {
     (value["region"] !== undefined &&
       !REGION_ORDER.includes(value["region"] as (typeof REGION_ORDER)[number])) ||
     !validWorldLayouts(value["worldLayouts"]) ||
+    (value["journal"] !== undefined && !validJournal(value["journal"])) ||
+    (value["fieldRestorations"] !== undefined && (!Array.isArray(value["fieldRestorations"]) || value["fieldRestorations"].length>FIELD_MECHANISM_IDS.length
+      || new Set(value["fieldRestorations"]).size!==value["fieldRestorations"].length
+      || !value["fieldRestorations"].every(id=>FIELD_MECHANISM_IDS.includes(id)))) ||
     (value["ancientMarkerHeard"] !== undefined &&
       typeof value["ancientMarkerHeard"] !== "boolean") ||
     (value["resonanceStep"] !== undefined &&
@@ -99,6 +121,7 @@ export function isGame(value: unknown): value is Game {
     !["exploration", "battle", "result"].includes(String(value["scene"]))
   )
     return false;
+  if (!validTrainingRecords(value["trainingRecords"],value as unknown as Game)) return false;
   const collection = value["collection"];
   if (
     !Array.isArray(collection) ||
@@ -164,7 +187,7 @@ export function isGame(value: unknown): value is Game {
     return false;
   const p = value["player"] as { x: number; y: number };
   const region = REGION_ORDER.includes(value["region"] as (typeof REGION_ORDER)[number]) ? value["region"] as (typeof REGION_ORDER)[number] : "clearing";
-  if (["wall", "water", "ruin"].includes(mapTile(p.x, p.y, region)))
+  if (["wall", "water", "ruin"].includes(explorationTile(value as unknown as Game,p.x,p.y)))
     return false;
   if (
     layoutIn(value as unknown as Game, region).npcs.some((npc) => npc.x === p.x && npc.y === p.y)
@@ -185,6 +208,13 @@ export function isGame(value: unknown): value is Game {
   )
     return false;
   if (b["balance"] !== undefined && !isBalanceConfig(b["balance"])) return false;
+  if (b["rematch"] !== undefined) {
+    const practice=b["rematch"];
+    if (!isRecord(practice) || Object.keys(practice).length!==3 || !["skill","guard"].includes(String(practice["goal"]))
+      || typeof practice["usedSkill"]!=="boolean" || typeof practice["usedGuard"]!=="boolean"
+      || b["mode"]!=="classic" || b["kind"]!=="npc" || b["guided"]!==false
+      || typeof b["challengeId"]!=="string" || !(value as unknown as Game).npcDuelWins?.includes(b["challengeId"])) return false;
+  }
   for (const key of ["ally", "enemy"]) {
     const f = b[key];
     if (

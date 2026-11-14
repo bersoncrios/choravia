@@ -1,10 +1,12 @@
+import { fieldPoints, fieldAvailable } from "../domain/field-world.js";
+import type { FieldState } from "../domain/field.js";
+import { explorationTile, fieldMechanisms } from "../domain/field-abilities.js";
 import {
   Game,
   type Command,
   type Position,
   SpeciesId,
   species,
-  mapTile,
   affectedCells,
   same,
   distance,
@@ -151,7 +153,7 @@ export class Renderer {
     ctx.scale(dpr, dpr);
     ctx.imageSmoothingEnabled = false;
   }
-  draw(g: Game, time: number, reduced: boolean, selection: string): void {
+  draw(g: Game, time: number, reduced: boolean, selection: string, field?: {state: FieldState | null; cycle: number}): void {
     const dt = Math.min(Math.max(0, (time - this.lastTime) / 1000), 0.083);
     if (this.action && time - this.action.start > this.action.feedback.duration) this.action = null;
     if (reduced) this.action = null;
@@ -190,6 +192,8 @@ export class Renderer {
         ctx.scale(zoom, zoom);
       }
       this.drawMap(g, time, reduced);
+      if (field?.state) this.drawField(g, field.state, field.cycle, time, reduced);
+      this.drawFieldEnvironment(g, time, reduced);
       this.hero(
         this.shown.x * 24 + 12,
         this.shown.y * 24 + 12,
@@ -198,6 +202,7 @@ export class Renderer {
         g.avatar ?? DEFAULT_AVATAR,
         this.facing,
       );
+      this.drawForegroundCanopies(g);
       this.drawWorldFeedback(time, reduced);
       ctx.restore();
       if (!reduced && time - this.regionAt < 340) {
@@ -236,45 +241,42 @@ export class Renderer {
     );
     for (let y = 0; y < 15; y++)
       for (let x = 0; x < 20; x++) {
-        const t = mapTile(x, y, g.region ?? "clearing"),
+        const t = explorationTile(g, x, y),
           px = x * 24,
           py = y * 24;
         const noise = (x * 17 + y * 11) % 7;
         c.fillStyle =
           t === "path"
-            ? ancient
-              ? "#867d68"
-              : "#9b9366"
+            ? cavern ? "#788788" : canopy ? "#a0966b" : ancient ? "#867d68" : "#aa9b6c"
             : t === "grass"
-              ? ancient
-                ? "#637e5d"
-                : "#528450"
+              ? cavern ? "#607d81" : ancient ? "#637e5d" : canopy ? "#648950" : "#528450"
               : t === "water"
-                ? cavern ? "#376e9a" : canopy ? "#739b69" : "#427f8e"
+                ? cavern ? "#315b78" : canopy ? "#739b69" : "#427f8e"
                 : t === "wall"
                   ? ancient
                     ? "#273d3a"
                     : "#193d37"
                   : cavern ? "#344b59" : canopy ? "#42674c" : ancient ? "#4a604d" : "#356347";
         c.fillRect(px, py, 24, 24);
+        this.terrainDetails(g, x, y, t, noise);
         if (t === "grass") {
           for (let n = 0; n < 4; n++) {
             const gx = px + 3 + ((n * 7 + noise) % 20),
               gy = py + 6 + ((n * 9) % 18);
             const wind = reduced ? 0 : Math.sin(time / 900 + x + y) * 1.4;
-            c.fillStyle = n % 2 ? "#8db66a" : "#284f3c";
+            c.fillStyle = n % 2 ? (cavern ? "#9cb8b2" : canopy ? "#a0bd77" : "#8db66a") : (cavern ? "#3f5962" : "#284f3c");
             c.fillRect(gx, gy, 2, 6);
             c.fillRect(gx - 2 + wind, gy - 2, 2, 4);
             c.fillRect(gx + 2, gy - 1, 2, 4);
           }
         }
         if (t === "ground" && noise < 3) {
-          c.fillStyle = "#6b9357";
+          c.fillStyle = cavern ? "#77939a" : ancient ? "#85986d" : "#6b9357";
           c.fillRect(px + 6, py + 9, 2, 2);
           c.fillRect(px + 16, py + 17, 2, 3);
         }
         if (t === "path") {
-          c.fillStyle = "#b4a878";
+          c.fillStyle = cavern ? "#a7b6b0" : "#c2b789";
           c.fillRect(px + noise * 3, py + 7, 3, 2);
         }
         if (t === "water") {
@@ -283,7 +285,7 @@ export class Renderer {
           c.fillRect(px + 4 + shift, py + 7, 10, 1);
           c.fillRect(px + 10 - shift, py + 18, 7, 1);
         }
-        if (t === "wall") this.tree(px, py, noise);
+        if (t === "wall") this.tree(px, py, noise, region);
         if (t === "ruin") {
           c.fillStyle = ancient ? "#8c9277" : "#7d9485";
           c.fillRect(px + 1, py + 1, 22, 22);
@@ -328,6 +330,10 @@ export class Renderer {
         if (t === "gate") {
           this.portal(region, px, py, time, reduced);
         }
+        if (layout.pots.some(pot => pot.x === x && pot.y === y && (g.brokenPots ?? []).includes(pot.id))) {
+          c.fillStyle = "#845b48"; c.fillRect(px + 6, py + 18, 5, 3); c.fillRect(px + 14, py + 16, 4, 3);
+          c.fillStyle = "#bf9771"; c.fillRect(px + 8, py + 18, 3, 1);
+        }
         if (pots.some((pot) => pot.x === x && pot.y === y)) {
           c.fillStyle = "#142b2b80";
           c.fillRect(px + 5, py + 19, 15, 3);
@@ -340,18 +346,33 @@ export class Renderer {
           c.fillStyle = "#eacd76";
           c.fillRect(px + 11, py + 13, 3, 2);
         }
-        if (layout.npcs.some((npc) => npc.x === x && npc.y === y)) {
+        const npc = layout.npcs.find((entry) => entry.x === x && entry.y === y);
+        if (npc) {
           c.fillStyle = "#142b2b80";
           c.fillRect(px + 5, py + 20, 15, 3);
           c.fillStyle = "#2f4740";
           c.fillRect(px + 8, py + 13, 4, 8);
           c.fillRect(px + 14, py + 13, 4, 8);
-          c.fillStyle = "#5e9a77";
+          c.fillStyle = cavern ? "#6c9ca7" : canopy ? "#8b9e66" : ancient ? "#8c8b73" : "#5e9a77";
           c.fillRect(px + 6, py + 7, 13, 10);
           c.fillStyle = "#d9ad83";
           c.fillRect(px + 8, py + 1, 10, 9);
           c.fillStyle = "#5c4438";
           c.fillRect(px + 7, py + 1, 12, 4);
+          // Shape distinguishes the initial duel from unlocked repeat practice.
+          const trained = (g.npcDuelWins ?? []).includes(npc.id);
+          c.fillStyle = "#193630"; c.fillRect(px + 8, py - 7, 9, 7);
+          c.strokeStyle = trained ? "#a9d8bd" : "#f3dc96";
+          c.lineWidth = 1;
+          c.beginPath();
+          if (trained) {
+            c.moveTo(px + 10, py - 6); c.lineTo(px + 15, py - 2);
+            c.moveTo(px + 15, py - 6); c.lineTo(px + 10, py - 2);
+          } else {
+            c.moveTo(px + 12, py - 6); c.lineTo(px + 15, py - 4);
+            c.lineTo(px + 12, py - 1); c.lineTo(px + 9, py - 4); c.closePath();
+          }
+          c.stroke();
         }
       }
     if (!reduced) {
@@ -367,6 +388,191 @@ export class Renderer {
     }
     c.fillStyle = "#142d3040";
     c.fillRect(0, 0, 480, 12);
+  }
+  private drawField(g: Game, state: FieldState, cycle: number, time: number, reduced: boolean): void {
+    if ((g.region ?? "clearing") !== "clearing") return;
+    const c = this.ctx;
+    for (const point of fieldPoints(g, cycle)) {
+      const x = point.x * 24, y = point.y * 24, available = fieldAvailable(state, point.id, cycle);
+      c.fillStyle = "#112e3560"; c.beginPath(); c.ellipse(x + 12, y + 20, 9, 3, 0, 0, Math.PI * 2); c.fill();
+      c.save(); c.globalAlpha = available ? 1 : 0.5;
+      if (point.id === "treasure") {
+        c.fillStyle = "#80583f"; c.fillRect(x + 4, y + 10, 16, 10);
+        c.fillStyle = "#d6ad65"; c.fillRect(x + 4, y + (available ? 8 : 3), 16, 4);
+        c.fillRect(x + 6, y + 11, 2, 8); c.fillRect(x + 17, y + 11, 2, 8);
+        c.fillStyle = "#182e2c"; c.fillRect(x + 8, y + (available ? 12 : 8), 8, available ? 2 : 5);
+      } else if (point.id === "sap") {
+        c.fillStyle = "#70563b"; c.fillRect(x + 7, y + 4, 9, 16);
+        c.fillStyle = available ? "#e9d385" : "#8d8161"; c.fillRect(x + 13, y + 9, 4, 7);
+        c.fillStyle = "#588459"; c.fillRect(x + 4, y + 3, 16, 5);
+      } else if (point.id === "crystal") {
+        c.fillStyle = available ? "#9ddacb" : "#697c7c";
+        c.beginPath(); c.moveTo(x + 12, y + (available ? 3 : 14)); c.lineTo(x + 19,y + 15); c.lineTo(x + 13,y + 21); c.lineTo(x + 6,y + 16); c.fill();
+      } else if (point.id === "cache") {
+        c.fillStyle = "#4e7052"; c.fillRect(x + 3,y + 12,18,8);
+        c.fillStyle = available ? "#ead79a" : "#a4aa89"; c.fillRect(x + 9,y + 13,7,4);
+        c.fillStyle = "#709262"; c.fillRect(x + 4,y + 10,8,4); c.fillRect(x + 15,y + 16,5,3);
+      } else {
+        c.fillStyle = available ? "#77ae71" : "#65836a";
+        c.fillRect(x + 11,y + (available ? 7 : 15),2,13 - (available ? 0 : 8));
+        c.fillRect(x + 5,y + 12,7,4); c.fillRect(x + 13,y + 9,7,4);
+        if (point.id === "fruit" && available) { c.fillStyle = "#e4a274"; c.fillRect(x + 5,y + 10,4,4); c.fillRect(x + 16,y + 7,4,4); }
+      }
+      c.restore();
+      if (distance(g.player, point) <= 1) {
+        c.strokeStyle = "#f5e4b1"; c.lineWidth = 1; c.strokeRect(x + 1,y + 1,22,22);
+      }
+      if (available) {
+        c.fillStyle = "#f1df9e";
+        const lift = reduced ? 0 : Math.sin(time / 550 + point.x) * 2;
+        c.fillRect(x + 11,y - 2 + lift,2,3);
+      } else { c.fillStyle = "#e4dfc2"; c.font = "8px monospace"; c.fillText(point.id === "treasure" ? "✓" : "−", x + 10,y + 3); }
+    }
+    if (state.restored) {
+      const x = 7 * 24 + 12, y = 10 * 24 + 5;
+      c.fillStyle = "#e8ce7680"; c.beginPath(); c.ellipse(x,y + 4,19,14,0,0,Math.PI*2); c.fill();
+      c.fillStyle = "#f5e3a1"; c.fillRect(x - 3,y - 3,6,8);
+      c.fillStyle = "#72543c"; c.fillRect(x - 4,y - 5,8,2); c.fillRect(x - 4,y + 5,8,2);
+    }
+  }
+  /** Pure presentation: the domain supplies eligible positions and completed restorations. */
+  private drawFieldEnvironment(g: Game, time: number, reduced: boolean): void {
+    const c = this.ctx;
+    const restorations = g.fieldRestorations ?? [];
+    if (g.region === "tide-cavern") this.drawTideBridge(restorations.includes("tide-bridge"));
+    for (const mechanism of fieldMechanisms(g)) {
+      const restored = restorations.includes(mechanism.id);
+      const x = mechanism.x * 24, y = mechanism.y * 24;
+      c.save();
+      c.fillStyle = "#12292e80";
+      c.beginPath(); c.ellipse(x + 12, y + 21, 10, 3, 0, 0, Math.PI * 2); c.fill();
+      if (mechanism.element === "fire") {
+        if (restored) {
+          c.fillStyle = "#e7b55b28";
+          c.beginPath(); c.ellipse(x + 12, y + 10, 21, 17, 0, 0, Math.PI * 2); c.fill();
+        }
+        c.fillStyle = "#6f573e";
+        c.fillRect(x + 10, y + 14, 4, 9);
+        c.fillRect(x + 6, y + 4, 12, 3);
+        c.fillRect(x + 6, y + 16, 12, 3);
+        c.fillRect(x + 6, y + 7, 2, 9);
+        c.fillRect(x + 16, y + 7, 2, 9);
+        c.fillStyle = restored ? "#f3d47c" : "#3a4740";
+        c.fillRect(x + 9, y + 8, 6, 7);
+        c.fillStyle = restored ? "#fff1bd" : "#8e9272";
+        c.fillRect(x + 11, y + (restored ? 8 : 13), 2, restored ? 5 : 2);
+      } else if (mechanism.element === "plant") {
+        c.fillStyle = "#76553d";
+        c.fillRect(x + 3, y + 15, 18, 6);
+        c.fillStyle = "#a99161";
+        c.fillRect(x + 3, y + 15, 18, 2);
+        c.fillStyle = restored ? "#6fa45e" : "#766b4a";
+        c.fillRect(x + 6, y + (restored ? 7 : 12), 2, restored ? 9 : 4);
+        c.fillRect(x + 16, y + (restored ? 6 : 13), 2, restored ? 10 : 3);
+        c.fillRect(x + 3, y + (restored ? 9 : 13), 4, 2);
+        c.fillRect(x + 17, y + (restored ? 8 : 14), 4, 2);
+        if (restored) {
+          this.drawFlower(x + 7, y + 6, "#edd7a2");
+          this.drawFlower(x + 17, y + 5, "#d99e9a");
+          // Existing paths gain a fixed, sparse line of flowers toward the exit.
+          const exit = g.region === "old-grove" ? 2 : 17;
+          for (let trailX = 3; trailX < 18; trailX += 2) {
+            if ((exit === 2 ? trailX > mechanism.x : trailX < mechanism.x) || explorationTile(g, trailX, 10) !== "path") continue;
+            this.drawFlower(trailX * 24 + 5, 10 * 24 + 19, "#e7d28e");
+          }
+        } else {
+          c.strokeStyle = "#c1aa78"; c.lineWidth = 1;
+          c.beginPath(); c.moveTo(x + 9, y + 10); c.lineTo(x + 14, y + 15); c.stroke();
+        }
+      } else if (mechanism.element === "water") {
+        c.fillStyle = "#7f8a7b"; c.fillRect(x + 1, y + 17, 22, 5);
+        c.fillStyle = restored ? "#75bec7" : "#455b63";
+        c.fillRect(x + 2, y + 19, 20, 2);
+        c.save(); c.translate(x + 12, y + 11);
+        if (restored && !reduced) c.rotate(time / 1800);
+        c.strokeStyle = restored ? "#c8ad76" : "#7c715a";
+        c.lineWidth = 2;
+        c.beginPath(); c.arc(0, 0, 8, 0, Math.PI * (restored ? 2 : 1.65)); c.stroke();
+        for (let spoke = 0; spoke < 6; spoke++) {
+          const angle = spoke * Math.PI / 3;
+          c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(angle) * 8, Math.sin(angle) * 8); c.stroke();
+        }
+        c.fillStyle = "#dfc28b"; c.fillRect(-2, -2, 4, 4); c.restore();
+        if (restored) {
+          c.fillStyle = "#c5e4d2";
+          c.fillRect(x + 2, y + 17, 3, 2);
+          c.fillRect(x + 18, y + 19, 3, 2);
+        }
+      } else if (mechanism.element === "electric") {
+        c.fillStyle = "#738270"; c.fillRect(x + 6, y + 5, 12, 17);
+        c.fillStyle = "#a6b393"; c.fillRect(x + 6, y + 4, 12, 3);
+        c.fillStyle = restored ? "#ead976" : "#344d43";
+        c.fillRect(x + 9, y + 8, 6, 9);
+        c.strokeStyle = restored ? "#fff2ae" : "#c4b87d"; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(x + 13, y + 8); c.lineTo(x + 10, y + 12); c.lineTo(x + 14, y + 12); c.lineTo(x + 11, y + 17); c.stroke();
+        if (restored) {
+          c.strokeStyle = "#e9da934f";
+          c.beginPath(); c.ellipse(x + 12, y + 3, 13, 5, 0, 0, Math.PI * 2); c.stroke();
+          c.fillStyle = "#f8e8a1"; c.fillRect(x + 10, y, 4, 3);
+        } else {
+          c.fillStyle = "#253d38"; c.fillRect(x + 5, y + 18, 14, 2);
+        }
+      } else {
+        c.fillStyle = restored ? "#a9b294" : "#6b7d7e";
+        c.fillRect(x + 4, y + 13, 16, 8);
+        c.fillRect(x + 7, y + 7, 10, 9);
+        c.fillStyle = "#d2c29a"; c.fillRect(x + 8, y + 7, 8, 2);
+        c.strokeStyle = "#354d4c"; c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(x + (restored ? 7 : 10), y + 13);
+        c.lineTo(x + (restored ? 11 : 13), y + (restored ? 17 : 16));
+        c.lineTo(x + (restored ? 17 : 10), y + (restored ? 10 : 20));
+        c.stroke();
+      }
+      if (distance(g.player, mechanism) <= 1) {
+        c.strokeStyle = "#f4e4b4"; c.lineWidth = 1;
+        c.strokeRect(x + 1, y + 1, 22, 22);
+      }
+      // Status remains visible without color or movement: hollow diamond / completed tick.
+      c.fillStyle = restored ? "#f5e5b2" : "#e6e0c4";
+      c.font = "9px monospace"; c.fillText(restored ? "✓" : "◇", x + 9, y - 2);
+      if (restored && !reduced) {
+        // Three deterministic motes per restored mechanism; no allocations or game RNG.
+        for (let mote = 0; mote < 3; mote++) {
+          const phase = time / (1000 + mote * 180) + mote * 2;
+          c.globalAlpha = 0.28 + (Math.sin(phase) + 1) * 0.2;
+          c.fillStyle = mechanism.element === "water" ? "#b6e0e7" : "#f0df9f";
+          c.fillRect(x + 10 + Math.cos(phase) * 11, y + 6 + Math.sin(phase) * 7, 1.5, 1.5);
+        }
+      }
+      c.restore();
+    }
+  }
+  private drawFlower(x: number, y: number, petals: string): void {
+    const c = this.ctx;
+    c.fillStyle = "#55845c"; c.fillRect(x, y + 2, 1, 4);
+    c.fillStyle = petals; c.fillRect(x - 2, y, 5, 1); c.fillRect(x, y - 2, 1, 5);
+    c.fillStyle = "#b18f51"; c.fillRect(x, y, 1, 1);
+  }
+  private drawTideBridge(restored: boolean): void {
+    const c = this.ctx, y = 8 * 24;
+    if (!restored) {
+      c.fillStyle = "#77664c";
+      c.fillRect(4 * 24, y + 3, 11, 3); c.fillRect(6 * 24 + 13, y + 17, 11, 3);
+      c.fillStyle = "#b09b72";
+      c.fillRect(4 * 24 + 2, y + 5, 3, 13); c.fillRect(6 * 24 + 19, y + 4, 3, 15);
+      return;
+    }
+    // Optional crossing uses exactly the domain's three restored path tiles.
+    c.fillStyle = "#263c4080"; c.fillRect(4 * 24, y + 3, 72, 20);
+    for (let plank = 0; plank < 12; plank++) {
+      c.fillStyle = plank % 2 ? "#baaa7d" : "#9b8d69";
+      c.fillRect(4 * 24 + plank * 6, y + 4, 5, 16);
+      c.fillStyle = "#645e4d"; c.fillRect(4 * 24 + plank * 6 + 2, y + 6, 1, 1);
+    }
+    c.fillStyle = "#d3bf8e";
+    c.fillRect(4 * 24, y + 2, 72, 2); c.fillRect(4 * 24, y + 20, 72, 2);
+    for (const end of [4 * 24, 7 * 24 - 3]) { c.fillRect(end, y, 3, 7); c.fillRect(end, y + 17, 3, 7); }
   }
   private portal(region: NonNullable<Game["region"]>, x: number, y: number, time: number, reduced: boolean): void {
     const c = this.ctx;
@@ -418,16 +624,89 @@ export class Renderer {
       c.fillRect(x + 9 + sparkle * 2, y + 10 + (sparkle % 2) * 4, 2, 2);
     }
   }
-  private tree(x: number, y: number, n: number): void {
+  private terrainDetails(g: Game, x: number, y: number, tile: ReturnType<typeof explorationTile>, noise: number): void {
+    const c = this.ctx, px = x * 24, py = y * 24, region = g.region ?? "clearing";
+    const cavern = region === "tide-cavern", ancient = region === "old-grove", canopy = region === "canopy-trail";
+    if (tile === "path") {
+      // Borders use the exact exploration terrain, including the restored bridge.
+      c.fillStyle = cavern ? "#4d6469" : "#6e7955";
+      if (explorationTile(g, x, y - 1) !== "path") c.fillRect(px, py, 24, 2);
+      if (explorationTile(g, x, y + 1) !== "path") c.fillRect(px, py + 22, 24, 2);
+      if (explorationTile(g, x - 1, y) !== "path") c.fillRect(px, py, 2, 24);
+      if (explorationTile(g, x + 1, y) !== "path") c.fillRect(px + 22, py, 2, 24);
+      c.fillStyle = cavern ? "#98aaa6" : "#baac7e";
+      c.fillRect(px + 6 + noise, py + 14, 4, 2);
+      c.fillStyle = cavern ? "#586e74" : "#8e855e";
+      c.fillRect(px + 16, py + 5 + noise, 2, 1);
+      if (ancient && noise % 3 === 0) { c.fillStyle = "#6f7754"; c.fillRect(px + 4, py + 17, 4, 1); }
+    } else if (tile === "water") {
+      c.fillStyle = cavern ? "#213e59" : canopy ? "#4c6b53" : "#2b5964";
+      if (explorationTile(g, x, y - 1) !== "water") c.fillRect(px, py, 24, 3);
+      if (explorationTile(g, x - 1, y) !== "water") c.fillRect(px, py, 3, 24);
+      c.fillStyle = cavern ? "#8bb1bc" : "#8caaa0";
+      if (explorationTile(g, x, y + 1) !== "water") c.fillRect(px + 2, py + 22, 20, 1);
+      if (explorationTile(g, x + 1, y) !== "water") c.fillRect(px + 22, py + 3, 1, 18);
+    } else if (tile === "ground" || tile === "grass") {
+      if (explorationTile(g, x, y - 1) === "wall") { c.fillStyle = "#122d3030"; c.fillRect(px + 2, py, 22, 4); }
+      if (cavern && noise % 2 === 0) {
+        c.fillStyle = "#526974"; c.fillRect(px + 12, py + 7, 5, 2);
+        c.fillStyle = "#263e4c"; c.fillRect(px + 13, py + 9, 4, 1);
+      } else if (ancient && noise === 4) {
+        c.strokeStyle = "#777553"; c.lineWidth = 1; c.beginPath();
+        c.moveTo(px + 3, py + 18); c.lineTo(px + 7, py + 16); c.lineTo(px + 9, py + 10); c.stroke();
+      } else if (canopy && noise === 2) {
+        c.fillStyle = "#a0aa63"; c.fillRect(px + 7, py + 15, 4, 2);
+        c.fillStyle = "#274e39"; c.fillRect(px + 8, py + 14, 1, 4);
+      } else if (region === "clearing" && noise === 5) {
+        c.fillStyle = "#9cbb76"; c.fillRect(px + 17, py + 8, 3, 1);
+        c.fillStyle = "#d5c997"; c.fillRect(px + 18, py + 7, 1, 3);
+      }
+    }
+  }
+  private tree(x: number, y: number, n: number, region: NonNullable<Game["region"]>): void {
     const c = this.ctx;
-    c.fillStyle = "#182f2c";
-    c.fillRect(x + 9, y + 13, 6, 11);
-    c.fillStyle = "#214f3f";
-    c.fillRect(x + 2, y + 5, 21, 14);
-    c.fillStyle = n % 2 ? "#326d4c" : "#2a6146";
-    c.fillRect(x + 5, y + 1, 15, 13);
-    c.fillStyle = "#427a52";
-    c.fillRect(x + 7, y + 2, 10, 3);
+    if (region === "tide-cavern") {
+      c.fillStyle = "#1e3444"; c.fillRect(x + 3, y + 18, 20, 6);
+      c.fillStyle = n % 2 ? "#425865" : "#4b626b";
+      c.beginPath(); c.moveTo(x + 3, y + 19); c.lineTo(x + 4, y + 8); c.lineTo(x + 11, y + 2); c.lineTo(x + 19, y + 5); c.lineTo(x + 23, y + 17); c.lineTo(x + 19, y + 22); c.closePath(); c.fill();
+      c.fillStyle = "#71878b"; c.fillRect(x + 9, y + 5, 8, 2);
+      c.strokeStyle = "#2b4354"; c.lineWidth = 1; c.beginPath(); c.moveTo(x + 15, y + 10); c.lineTo(x + 11, y + 14); c.lineTo(x + 13, y + 19); c.stroke();
+      if (n === 0 || n === 3) {
+        c.fillStyle = "#81b8c6"; c.beginPath(); c.moveTo(x + 6, y + 12); c.lineTo(x + 8, y + 6); c.lineTo(x + 11, y + 12); c.lineTo(x + 9, y + 16); c.closePath(); c.fill();
+        c.fillStyle = "#c1ddd8"; c.fillRect(x + 8, y + 8, 1, 5);
+      }
+      return;
+    }
+    const ancient = region === "old-grove", canopy = region === "canopy-trail";
+    c.fillStyle = "#132e2b"; c.fillRect(x + 4, y + 19, 20, 4);
+    c.fillStyle = ancient ? "#61563e" : "#4a5037"; c.fillRect(x + 9, y + 12, 6, 12);
+    c.fillStyle = "#263b2d"; c.fillRect(x + 11, y + 15, 2, 8);
+    c.fillStyle = ancient ? "#284c3f" : canopy ? "#285941" : "#24523e";
+    c.fillRect(x + 1, y + 5, 22, 13);
+    c.fillRect(x + 4, y + 1, 16, 17);
+    c.fillStyle = ancient ? "#3d6350" : canopy ? "#46805a" : n % 2 ? "#3b7851" : "#346c49";
+    c.fillRect(x + 4, y + 4, 15, 9);
+    c.fillRect(x + 8, y + 1, 11, 8);
+    c.fillStyle = ancient ? "#73805b" : canopy ? "#76a668" : "#659559";
+    c.fillRect(x + 9, y + 2, 7, 2);
+    c.fillRect(x + 5, y + 6, 4, 2);
+    if (ancient) { c.fillStyle = "#8b8d5d"; c.fillRect(x + 7, y + 14, 2, 4); }
+    if (canopy) { c.fillStyle = "#638453"; c.fillRect(x + 19, y + 9, 1, 11); }
+  }
+  private drawForegroundCanopies(g: Game): void {
+    const region = g.region ?? "clearing";
+    if (region === "tide-cavern") return;
+    const c = this.ctx, nextRow = Math.floor(this.shown.y) + 1;
+    // At most three crowns. A translucent lip preserves the hero silhouette.
+    if (nextRow >= 15) return;
+    c.save(); c.globalAlpha = 0.7;
+    for (let x = Math.max(0, Math.floor(this.shown.x) - 1); x <= Math.min(19, Math.floor(this.shown.x) + 1); x++) {
+      if (explorationTile(g, x, nextRow) !== "wall") continue;
+      c.fillStyle = region === "old-grove" ? "#3d6350" : region === "canopy-trail" ? "#46805a" : "#346c49";
+      c.fillRect(x * 24 + 4, nextRow * 24 - 3, 16, 6);
+      c.fillStyle = "#86a56c"; c.fillRect(x * 24 + 9, nextRow * 24 - 2, 6, 1);
+    }
+    c.restore();
   }
   private hero(
     x: number,

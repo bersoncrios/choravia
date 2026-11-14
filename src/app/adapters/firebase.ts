@@ -1,4 +1,5 @@
 import { FirestoreLiveOps } from "./firestore-live-ops.js";
+import { FirestoreField } from "./firestore-field.js";
 import type { LiveOpsRequest, LiveContent, PlayerBadge } from "../domain/live-ops.js";
 import { getApps, initializeApp } from "firebase/app";
 import {
@@ -57,6 +58,10 @@ export class FirebaseGateway implements OnlineGateway {
   }
   get uid(): string {
     return this.auth.currentUser?.uid ?? "";
+  }
+  fieldGateway() {
+    if (!this.uid) throw new Error("Entre com Google para abrir a mochila.");
+    return new FirestoreField(this.app, this.uid, () => this.uid, this.emulators);
   }
   get signedIn(): boolean {
     return !!this.auth.currentUser;

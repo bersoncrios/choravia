@@ -112,3 +112,31 @@ Nas respostas de trabalho, começar com o papel em uso, por exemplo `### [AGENTE
 - Regras puras recebem balanceamento explícito no save e na batalha; configuração nova só é aplicada na exploração, preservando XP, níveis e derrotados. Loja/guarda-roupa/Canvas usam os acessórios publicados; compras retiradas são preservadas.
 - Validação: 125 testes, build, 12 integrações nos emuladores demo, Chromium da feature (quatro dimensões), UI/role e combate (sete dimensões cada) aprovados. Ver `GM_LIVE_OPS.md`.
 - Mudanças locais, sem commit/push/publicação. **Publicar Rules e frontend compatíveis juntos**; não publicar Functions. Não houve criação de catálogo/badges nem concessões em produção.
+
+## Evolução — coleta e restauração (14/11/2026)
+
+- Diagnóstico inicial e backlog em `EVOLUTION_ROADMAP.md`. Implementada a primeira entrega: ervas/frutos/seiva/cristais renováveis na clareira, baú único que permanece aberto, esconderijo rotativo, mochila filtrável, receita de lanterna e missão Uma luz para Iara. A entrega restaura visualmente o marco; não concede Sementes ou XP. Vasos antigos deixam cacos sem renovar a recompensa.
+- Materiais/claims/missão usam ledger separado do save em `users/{uid}/field/state`, ciclo 00h UTC conferido pelo Firestore e recibos imutáveis. Rules validam transições exatas; localização continua calculada no cliente. Pedido sem confirmação permanece por conta no armazenamento local e é repetido com o mesmo ID.
+- Sem mudança no formato `Game`, nas batalhas ou na arquitetura Auth/Firestore direto. Reset GM antigo não apaga a mochila. Novos mapas, espécies, habilidades ambientais gerais, áudio expandido e editores GM continuam no roadmap.
+- Validação: 134 testes unitários/aplicação; 14 integrações Auth/Firestore demo; navegador de campo em quatro larguras e regressões de UI, combate e expedição aprovadas; build AOT/Vite aprovado. Corrigido CSS externo que não carregava no JIT, com estilos inline e verificação computada. Capturas em `artifacts/field-*.png`.
+- Detalhes e limites em `FIELD_EXPLORATION.md`. Alterações locais, sem commit/push/publicação; frontend e Rules compatíveis devem ser publicados juntos mediante autorização. Sem homologação real de produção ou desempenho em aparelho físico. Vite mantém aviso de chunk principal acima de 500 kB.
+
+## Continuação — Diário dos Ecos e mapa de regiões
+
+- Próxima etapa do roadmap P1.2 entregue: **Menu → Mapa e diário** mostra circuito das quatro regiões, próximo destino, região atual/visitadas, habitats e atividades existentes. Diário mostra observados/na coleção, filtros, habilidades e descrições; espécies desconhecidas permanecem ocultas.
+- Histórico opcional `Game.journal` registra regiões e espécies em comandos aceitos e reconciliação da coleção; trocas não apagam observações. Saves antigos inferem somente fatos presentes, sem reconstruir visitas ausentes. Batalha legada conserva observação sem adicionar a região provisória da arena. Nenhuma nova recompensa, viagem rápida, espécie ou mapa foi introduzido nesta etapa.
+- `REGION_ENCOUNTERS` é compartilhado entre gerador e habitats, preservando os sorteios existentes. Regras de captura inalteradas; corrigido um teste antigo com probabilidade fixa desatualizada e sorteio aleatório para usar sementes determinísticas.
+- Validação: **142 testes** aprovados; build AOT/Vite aprovado; Chromium do diário em quatro larguras (320/390/768/1360), expedição, coleta e UI em sete larguras aprovados. Capturas `artifacts/journal-{map,ecos}-*.png` inspecionadas. Continua aviso do bundle principal acima de 500 kB.
+- Detalhes: `EXPLORATION_JOURNAL.md`. Nenhuma alteração adicional nas Rules nesta etapa, nenhum acesso de produção, commit/push ou publicação. Mudanças anteriores de coleta continuam locais e exigem frontend/Rules compatíveis juntos quando houver autorização para publicar.
+- Próxima etapa: P1.3 — habilidades ambientais e revanche de duelistas, definindo alternativas por elemento e limites/idempotência das recompensas. Arte/áudio e ferramentas GM seguem no roadmap.
+
+## Pausa solicitada — habilidades de campo e revanches
+
+- Usuário pediu pausa; não avançar até novo pedido de continuação.
+- P1.3 implementado localmente: cinco mecanismos (Fogo/Planta/Água/Elétrico/Terra), alternativa manual gratuita equivalente, estados visuais persistentes, ponte opcional nas casas x4..6/y8 da Gruta das Marés. Movimento, renderer e validação de save compartilham explorationTile.
+- Revanches liberadas após vitória inicial do NPC, com objetivos alternados habilidade/defesa e recordes de vitórias/melhor rodada. Sem Sementes, XP, captura ou progresso de Trilhas do dia nas revanches. Primeira vitória original preservada. Comandos novos respeitam bloqueios de criatura reservada e não são enviados à sessão online legada.
+- Diário ganhou aba Atividades de campo com cinco restaurações e recordes por duelista. Documentação de decisões: FIELD_ABILITIES_AND_TRAINING.md; projeção em exploration-activities.ts.
+- Validação concluída: **151 testes unitários/aplicação aprovados**, **build AOT/Vite aprovado**, browser-activities aprovado em 320/390/768/1360. Capturas antes/depois da ponte na mesma câmera e journal320 inspecionadas pelo QA em artifacts/activities-*.png. Continua aviso de chunk principal acima de 500 kB.
+- Regressões browser-combat e browser-journal foram iniciadas (sessões 10740 e 35266) antes do pedido de pausa; conferir saída ao retomar, sem alegar resultado ainda. Não iniciar mais testes nesta pausa.
+- Pendências de fechamento: registrar resultados finais em FIELD_ABILITIES_AND_TRAINING.md e atualizar README/roadmap/scripts com P1.3; conferir regressões pendentes e git diff --check. O QA alterou somente tests/browser-activities.mjs. Próximo bloco após fechar P1.3: arte/primeira camada sonora P1.4.
+- Alterações continuam locais e sem commit/push/publicação. Nenhum dado de produção alterado. As Rules da entrega anterior de coleta continuam pendentes de publicação conjunta com frontend autorizado.

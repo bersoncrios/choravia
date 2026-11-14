@@ -3,6 +3,7 @@ import type { AvatarAppearance } from "./avatar.js";
 import { isAvatarAppearance } from "./avatar.js";
 import { isStoreItemId, storeItem } from "./store.js";
 import type { StoreItemId } from "./store.js";
+import { explorationTile, fieldMechanisms, fieldMechanismReady } from "./field-abilities.js";
 
 export type Element = "fire" | "plant" | "water" | "electric" | "earth";
 export type SpeciesId = "WW001" | "WW002" | "WW003" | "WW004" | "WW005";
@@ -115,6 +116,14 @@ export interface Creature {
 export type Terrain = "ground" | "grass" | "water" | "fire";
 export type Region = "clearing" | "old-grove" | "canopy-trail" | "tide-cavern";
 export const REGION_ORDER: readonly Region[] = ["clearing", "old-grove", "canopy-trail", "tide-cavern"];
+/** Normal wild encounters. The first guided encounter separately introduces Brotatu. */
+export const REGION_ENCOUNTERS: Readonly<Record<Region, readonly SpeciesId[]>> = {
+  clearing: ["WW001", "WW002", "WW004"],
+  "old-grove": ["WW002", "WW003", "WW005"],
+  "canopy-trail": ["WW001", "WW002", "WW004"],
+  "tide-cavern": ["WW002", "WW003", "WW005"],
+};
+export interface ExplorationJournal { regions: Region[]; species: SpeciesId[] }
 export const REGION_NAMES: Readonly<Record<Region, string>> = {
   clearing: "Clareira do Primeiro Canto",
   "old-grove": "Clareira Antiga",
@@ -148,6 +157,8 @@ export function classicAttackPower(action: "basic" | "skill", level: number): nu
 export const SKILL_NAMES: Record<SpeciesId, string> = { WW001: "Faísca", WW002: "Chicote de folha", WW003: "Jato d’água", WW004: "Estalo", WW005: "Impacto de pedra" };
 export interface TurnFrame { action?: "basic" | "skill" | "defend" | "capture" | "flee"; actor: "player" | "enemy"; ally: Fighter; enemy: Fighter; message: string }
 export interface Battle {
+  /** Repeatable practice never grants Sementes, XP, captures or daily rewards. */
+  rematch?: { goal: "skill" | "guard"; usedSkill: boolean; usedGuard: boolean };
   balance?: BalanceConfig;
   mode?: "classic";
   allyCooldown?: number;
@@ -180,6 +191,8 @@ export interface Game {
   player: Position;
   /** Missing on pre-expansion saves; those remain in the first clearing. */
   region?: Region;
+  /** Additive discovery history; old saves infer only facts still present in their snapshot. */
+  journal?: ExplorationJournal;
   /** Story state; missing on older saves means the marker is untouched. */
   ancientMarkerHeard?: boolean;
   resonanceStep?: number;
@@ -188,6 +201,8 @@ export interface Game {
   seeds?: number;
   brokenPots?: string[];
   npcDuelWins?: string[];
+  fieldRestorations?: string[];
+  trainingRecords?: Record<string, { wins: number; bestRound: number; goals: ("skill" | "guard")[] }>;
   worldLayouts?: Partial<Record<Region, RegionLayout>>;
   ownedItems?: StoreItemId[];
   balance?: BalanceConfig;
@@ -203,6 +218,22 @@ export interface Game {
   message: string;
   events: GameEvent[];
   scene: "exploration" | "battle" | "result";
+}
+export function journalOf(game: Game): ExplorationJournal {
+  const known = new Set(game.journal?.species ?? []);
+  // Before onboarding, the default starter is only a placeholder, not a discovery.
+  if (game.starterChosen !== false || game.battle || game.collection.length > 1)
+    for (const creature of game.collection) known.add(creature.speciesId);
+  if (game.battle) { known.add(game.battle.ally.speciesId); known.add(game.battle.enemy.speciesId); }
+  const regions = new Set([...(game.journal?.regions ?? []), game.region ?? "clearing"]);
+  return { regions: REGION_ORDER.filter(id => regions.has(id)), species: SPECIES.filter(s => known.has(s.id)).map(s => s.id) };
+}
+export function mergeJournals(...games: Game[]): ExplorationJournal {
+  const entries = games.map(journalOf);
+  return {
+    regions: REGION_ORDER.filter(id => entries.some(entry => entry.regions.includes(id))),
+    species: SPECIES.filter(s => entries.some(entry => entry.species.includes(s.id))).map(s => s.id),
+  };
 }
 export type Command =
   | { type: "applyDailyReward"; receiptId: string; seeds: number; itemId?: StoreItemId; fallbackSeeds?: number }
@@ -220,6 +251,8 @@ export type Command =
   | { type: "chooseStarter"; speciesId: SpeciesId }
   | { type: "breakPot" }
   | { type: "challengeNpc"; npcId?: string }
+  | { type: "rematchNpc"; npcId?: string }
+  | { type: "restoreEnvironment"; id: string; method: "eco" | "manual" }
   | { type: "purchase"; itemId: StoreItemId }
   | { type: "activate"; id: string };
 export const same = (a: Position, b: Position): boolean =>
@@ -700,7 +733,7 @@ function finish(g: Game): void {
   let experience = ally.experience ?? 0;
   ally.level = level;
   ally.hp = b.ally.hp;
-  const xp = b.result === "capture"
+  const xp = b.rematch ? 0 : b.result === "capture"
     ? 18 + 3 * creatureLevel(b.enemy)
     : b.result === "victory"
       ? (b.kind === "npc" ? 45 : 30) + 5 * creatureLevel(b.enemy)
@@ -718,7 +751,20 @@ function finish(g: Game): void {
   b.ally.level = level;
   b.ally.hp = ally.hp;
   g.scene = "result";
-  if (b.result === "capture") {
+  if (b.rematch) {
+    if (b.result === "victory" && b.challengeId) {
+      const old = g.trainingRecords?.[b.challengeId];
+      const goalMet = b.rematch.goal === "skill" ? b.rematch.usedSkill : b.rematch.usedGuard;
+      const goals = new Set(old?.goals ?? []);
+      if (goalMet) goals.add(b.rematch.goal);
+      g.trainingRecords = { ...g.trainingRecords, [b.challengeId]: {
+        wins: Math.min(9999,(old?.wins ?? 0)+1),
+        bestRound: Math.min(old?.bestRound ?? 40,b.round),
+        goals: (["skill","guard"] as const).filter(goal=>goals.has(goal)),
+      }};
+      g.message = `Treino concluído em ${b.round} rodadas.${goalMet ? " Objetivo de prática registrado!" : " Vença usando a ação indicada para registrar o objetivo."} Sem Sementes ou XP.`;
+    } else g.message = "Treino encerrado. Você pode tentar novamente; sem Sementes ou XP.";
+  } else if (b.result === "capture") {
     const id = `capture-${b.id}`;
     if (!g.collection.some((c) => c.id === id)) {
       g.collection.push({
@@ -785,6 +831,7 @@ export function reduceGame(previous: Game, command: Command): Game {
   }
   const reject = (): Game => previous;
   const commit = (): Game => {
+    g.journal = mergeJournals(previous, g);
     g.revision++;
     g.events = g.events.slice(-100);
     return g;
@@ -851,6 +898,25 @@ export function reduceGame(previous: Game, command: Command): Game {
     return commit();
   }
   if (g.scene === "exploration") {
+    if (command.type === "restoreEnvironment") {
+      const mechanism = fieldMechanisms(g).find(m=>m.id===command.id);
+      if (!mechanism || distance(g.player,mechanism)>1 || (g.fieldRestorations ?? []).includes(mechanism.id)
+        || !["eco","manual"].includes(command.method) || command.method === "eco" && !fieldMechanismReady(g,mechanism)) return reject();
+      g.fieldRestorations = [...(g.fieldRestorations ?? []),mechanism.id];
+      g.message = mechanism.completedText;
+      return commit();
+    }
+    if (command.type === "rematchNpc") {
+      const npc = layoutIn(g,g.region??"clearing").npcs.find(entry=>(command.npcId ? entry.id===command.npcId : true)
+        && distance(g.player,entry)<=1 && (g.npcDuelWins ?? []).includes(entry.id));
+      if (!npc || activeCreature(g).hp<=0) return reject();
+      const goal = ((g.trainingRecords?.[npc.id]?.wins ?? 0)%2===0 ? "skill" : "guard") as "skill" | "guard";
+      g.battle = createBattle(`rematch-${npc.id}-${g.revision}`,activeCreature(g),npc.speciesId,false,"npc",npc.id,"classic",g.balance);
+      g.battle.rematch = {goal,usedSkill:false,usedGuard:false};
+      g.scene = "battle";
+      g.message = `${npc.name} propôs uma revanche de treino. Vença usando ${goal==="skill" ? "a habilidade elemental" : "Defender"}. Sem captura, Sementes ou XP.`;
+      return commit();
+    }
     if (command.type === "breakPot") {
       const region = g.region ?? "clearing";
       const pot = layoutIn(g, region).pots.find(
@@ -941,7 +1007,7 @@ export function reduceGame(previous: Game, command: Command): Game {
         return reject();
       const p = { x: g.player.x + command.dx, y: g.player.y + command.dy };
       const region = g.region ?? "clearing";
-      const tile = mapTile(p.x, p.y, region);
+      const tile = explorationTile(g,p.x,p.y);
       if (tile === "wall" || tile === "water" || tile === "ruin")
         return reject();
       if (
@@ -983,10 +1049,7 @@ export function reduceGame(previous: Game, command: Command): Game {
           if (!guided) {
             const r = nextRandom(g.rng);
             g.rng = r.seed;
-            const choices: readonly SpeciesId[] =
-              g.region === "old-grove" || g.region === "tide-cavern"
-                ? ["WW002", "WW003", "WW005"]
-                : ["WW001", "WW002", "WW004"];
+            const choices = REGION_ENCOUNTERS[g.region ?? "clearing"];
             enemy = choices[Math.floor(r.value * choices.length)] ?? "WW002";
           }
           g.battle = createBattle(
@@ -1036,6 +1099,8 @@ export function reduceGame(previous: Game, command: Command): Game {
     if ((command.type === "basic" || command.type === "skill") && !same(command.target, b.enemy.pos)) return reject();
     if (command.type === "skill" && (b.allyCooldown ?? 0) > 0) return reject();
     if (command.type === "capture" && !canCapture(b)) return reject();
+    if (b.rematch && command.type === "skill") b.rematch.usedSkill = true;
+    if (b.rematch && command.type === "defend") b.rematch.usedGuard = true;
     b.turnFrames = [];
     b.ally.guarding = false;
     const frame = (actor: TurnFrame["actor"], message: string, action: TurnFrame["action"]): void => {

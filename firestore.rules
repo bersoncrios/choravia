@@ -23,6 +23,94 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['displayName', 'email', 'photoURL', 'displayNameSearch', 'updatedAt'])
         && authProfileMatches();
+      // Field inventory has its own Rules-enforced ledger, never inferred from a save string.
+      match /field/{fieldId} {
+        function itemCount(n) { return n is int && n >= 0 && n <= 99; }
+        function validBag(b) {
+          return b is map && b.keys().hasAll(['herb','fruit','sap','crystal','lantern'])
+            && b.keys().hasOnly(['herb','fruit','sap','crystal','lantern'])
+            && itemCount(b.herb) && itemCount(b.fruit) && itemCount(b.sap) && itemCount(b.crystal) && itemCount(b.lantern);
+        }
+        function claimCount(n) { return n is int && n >= -1 && n <= 1000000; }
+        function validClaims(c) {
+          return c is map && c.keys().hasAll(['herb','fruit','sap','crystal','cache'])
+            && c.keys().hasOnly(['herb','fruit','sap','crystal','cache'])
+            && claimCount(c.herb) && claimCount(c.fruit) && claimCount(c.sap) && claimCount(c.crystal) && claimCount(c.cache);
+        }
+        function validField(d) {
+          return d.keys().hasAll(['state','updatedAt','cycleStart','operationId','action'])
+            && d.keys().hasOnly(['state','updatedAt','cycleStart','operationId','action'])
+            && d.updatedAt == request.time && d.cycleStart is int
+            && d.cycleStart >= 0 && d.cycleStart % 86400000 == 0
+            && request.time.toMillis() >= d.cycleStart && request.time.toMillis() < d.cycleStart + 86400000
+            && d.state is map && d.state.keys().hasAll(['version','revision','inventory','claims','treasure','restored'])
+            && d.state.keys().hasOnly(['version','revision','inventory','claims','treasure','restored'])
+            && d.state.version == 1 && d.state.revision is int && d.state.revision >= 0
+            && validBag(d.state.inventory) && validClaims(d.state.claims)
+            && d.state.treasure is bool && d.state.restored is bool;
+        }
+        function initialState(s) {
+          return s.revision == 0 && s.inventory == {'herb':0,'fruit':0,'sap':0,'crystal':0,'lantern':0}
+            && s.claims == {'herb':-1,'fruit':-1,'sap':-1,'crystal':-1,'cache':-1}
+            && s.treasure == false && s.restored == false;
+        }
+        function gather(old, next, action, cycle) {
+          let node = action.node;
+          return action.keys().hasOnly(['type','node']) && node in ['herb','fruit','sap','crystal','cache']
+            && next.treasure == old.treasure && next.restored == old.restored
+            && old.claims[node] < cycle && next.claims[node] == cycle
+            && next.claims.diff(old.claims).affectedKeys().hasOnly([node])
+            && (node == 'cache'
+              ? next.inventory.diff(old.inventory).affectedKeys().hasOnly(['herb','fruit'])
+                && next.inventory.herb == old.inventory.herb + 1 && next.inventory.fruit == old.inventory.fruit + 1
+              : next.inventory.diff(old.inventory).affectedKeys().hasOnly([node])
+                && next.inventory[node] == old.inventory[node] + 2);
+        }
+        function transition(old, next, action, cycle) {
+          return next.revision == old.revision + 1 && (
+            (action.type == 'gather' && gather(old,next,action,cycle))
+            || (action == {'type':'treasure'} && old.treasure == false && next.treasure == true
+              && next.restored == old.restored && next.claims == old.claims
+              && next.inventory.diff(old.inventory).affectedKeys().hasOnly(['crystal'])
+              && next.inventory.crystal == old.inventory.crystal + 1)
+            || (action == {'type':'craft'} && next.treasure == old.treasure && next.restored == old.restored
+              && next.claims == old.claims && next.inventory.fruit == old.inventory.fruit && next.inventory.crystal == old.inventory.crystal
+              && next.inventory.herb == old.inventory.herb - 2 && next.inventory.sap == old.inventory.sap - 2
+              && next.inventory.lantern == old.inventory.lantern + 1)
+            || (action == {'type':'restore'} && old.restored == false && next.restored == true
+              && next.treasure == old.treasure && next.claims == old.claims
+              && next.inventory.diff(old.inventory).affectedKeys().hasOnly(['lantern'])
+              && next.inventory.lantern == old.inventory.lantern - 1));
+        }
+        function receiptLinked(d) {
+          let receiptPath = /databases/$(database)/documents/users/$(uid)/field_receipts/$(d.operationId);
+          return validId(d.operationId) && !exists(receiptPath)
+            && getAfter(receiptPath).data.action == d.action
+            && getAfter(receiptPath).data.stateRevision == d.state.revision
+            && getAfter(receiptPath).data.createdAt == request.time;
+        }
+        allow get: if own(uid) && fieldId in ['state','clock'];
+        allow create: if own(uid) && ((fieldId == 'clock'
+          && request.resource.data.keys().hasOnly(['updatedAt']) && request.resource.data.updatedAt == request.time)
+          || (fieldId == 'state' && validField(request.resource.data) && initialState(request.resource.data.state)
+            && request.resource.data.operationId == 'bootstrap' && request.resource.data.action == {'type':'bootstrap'}));
+        allow update: if own(uid) && ((fieldId == 'clock'
+          && request.resource.data.keys().hasOnly(['updatedAt']) && request.resource.data.updatedAt == request.time)
+          || (fieldId == 'state' && validField(request.resource.data) && receiptLinked(request.resource.data)
+            && transition(resource.data.state,request.resource.data.state,request.resource.data.action,request.resource.data.cycleStart / 86400000)));
+        allow list, delete: if false;
+      }
+      match /field_receipts/{receiptId} {
+        allow get: if own(uid);
+        allow create: if own(uid) && validId(receiptId)
+          && request.resource.data.keys().hasAll(['action','stateRevision','createdAt'])
+          && request.resource.data.keys().hasOnly(['action','stateRevision','createdAt'])
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(uid)/field/state).data.operationId == receiptId
+          && getAfter(/databases/$(database)/documents/users/$(uid)/field/state).data.state.revision == request.resource.data.stateRevision
+          && getAfter(/databases/$(database)/documents/users/$(uid)/field/state).data.action == request.resource.data.action;
+        allow list, update, delete: if false;
+      }
       match /online/{stateId} {
         // Operational state contains no email, profile or save; exact reads enable swaps.
         allow get: if signedIn() && stateId == 'state';

@@ -184,12 +184,16 @@ test("guided capture succeeds without drawing RNG and is idempotent", () => {
   assert.equal(isGame(after), true);
 });
 test("ordinary capture uses exactly one PRNG sample", () => {
-  const g = encounter();
-  g.battle!.enemy.hp = 17;
-  const r = nextRandom(g.rng);
-  const after = reduceGame(g, { type: "capture" });
-  assert.equal(after.rng, r.seed);
-  assert.equal(after.battle!.result === "capture", r.value < 0.65);
+  for (const seed of [1, 827361]) {
+    const g = encounter();
+    g.rng = seed;
+    g.battle!.enemy.hp = 17;
+    const r = nextRandom(g.rng);
+    const chance = captureChance(17, species(g.battle!.enemy.speciesId).hp, 0);
+    const after = reduceGame(g, { type: "capture" });
+    assert.equal(after.rng, r.seed);
+    assert.equal(after.battle!.result === "capture", r.value < chance);
+  }
 });
 test("flee and knockout never grant creatures", () => {
   for (const kind of ["flee", "kill"]) {
