@@ -1,3 +1,4 @@
+import { SaveToastComponent } from "./save-toast/save-toast.js";
 import { LiveOpsPanelComponent } from "./live-ops-panel.js";
 import { applyLiveContent } from "../application/live-content.js";
 import { BADGE_SYMBOLS, isCustomAccessoryId, type LiveContent, type PlayerBadge, type LiveOpsRequest, type CustomAccessoryId } from "../domain/live-ops.js";
@@ -80,9 +81,10 @@ interface Preferences {
 @Component({
   selector: "ww-app",
   standalone: true,
-  imports: [OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent],
+  imports: [OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent, SaveToastComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+  <ww-save-toast [status]="cloudStatus()" />
   @if (presentation()) {
     <ww-welcome-page [authenticated]="!!profile()" (enterGame)="enterJourney()" />
   }
@@ -224,7 +226,7 @@ interface Preferences {
             [attr.aria-label]="'Conectado como ' + user.name"
           >
             <span class="profile-avatar">{{ initials(user.name) }}</span
-            ><strong>{{ user.name }}<small class="account-owner" [attr.title]="cloudLabel()">{{ !connectionAvailable() ? 'Sem conexão' : cloudStatus() === 'conflict' ? 'Revisar progresso' : cloudError() || expeditionError() ? 'Atualização pendente' : accountAccessPresent() && !accountSynchronized() ? 'Preparando expedição…' : expeditionSyncing() || cloudBusy() ? 'Salvando…' : 'Salvamento automático' }}</small></strong>
+            ><strong>{{ user.name }}</strong>
           </div>
         }
         <span class="local-badge"
