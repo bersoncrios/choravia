@@ -9,10 +9,10 @@ export type SyncModalState = "idle" | "syncing" | "saved" | "error";
   template: `
     @if (visible()) {
       <div class="sync-overlay">
-        <section class="sync-panel" [class.failure]="phase() === 'error'" role="dialog" aria-label="Salvamento do progresso" [attr.aria-busy]="phase() === 'syncing'">
+        <section class="sync-panel" [class.failure]="phase() === 'error'" role="dialog" aria-label="Recuperação do progresso" [attr.aria-busy]="phase() === 'syncing'">
           <div role="status" aria-live="polite" aria-atomic="true">
             @if (phase() === 'syncing') { <span class="spinner" aria-hidden="true"></span> }
-            <p>{{ phase() === 'syncing' ? 'Salvando progresso…' : phase() === 'saved' ? 'Progresso salvo ✓' : 'Falha ao salvar — exporte o estado' }}</p>
+            <p>{{ phase() === 'syncing' ? 'Recuperando progresso…' : phase() === 'saved' ? 'Progresso recuperado ✓' : 'Falha ao recuperar progresso — tente novamente ou exporte o estado' }}</p>
           </div>
           @if (phase() === 'error') {
             <div class="actions">
