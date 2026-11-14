@@ -1,4 +1,4 @@
-import { SaveToastComponent } from "./save-toast/save-toast.js";
+import { SyncModalComponent, type SyncModalState } from "./sync-modal/sync-modal.js";
 import { LiveOpsPanelComponent } from "./live-ops-panel.js";
 import { applyLiveContent } from "../application/live-content.js";
 import { BADGE_SYMBOLS, isCustomAccessoryId, type LiveContent, type PlayerBadge, type LiveOpsRequest, type CustomAccessoryId } from "../domain/live-ops.js";
@@ -81,10 +81,10 @@ interface Preferences {
 @Component({
   selector: "ww-app",
   standalone: true,
-  imports: [OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent, SaveToastComponent],
+  imports: [OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent, SyncModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-  <ww-save-toast [status]="cloudStatus()" />
+  <ww-sync-modal [state]="syncModalState()" (exportState)="exportSave()" (retry)="retrySyncModal()" />
   @if (presentation()) {
     <ww-welcome-page [authenticated]="!!profile()" (enterGame)="enterJourney()" />
   }
@@ -273,8 +273,7 @@ interface Preferences {
       @if (profile() && cloudStatus() === "conflict") {
         <section class="account-save" aria-label="Salvamento da conta">
           <div>
-            <span class="account-owner">{{ profile()?.name }}</span
-            ><strong>{{ cloudLabel() }}</strong>
+            <span class="account-owner">{{ profile()?.name }}</span>
             <p>{{ cloudError() }}</p>
           </div>
           @if (cloudStatus() === "conflict") {
@@ -1770,6 +1769,17 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         : cloud.error,
     );
     this.sync();
+  }
+  syncModalState(): SyncModalState {
+    if (this.presentation() || !this.accountAccessPresent() || !this.profile() || !this.game().avatar || !this.game().starterChosen) return "idle";
+    if (this.cloudBusy() || this.cloudStatus() === "saving" || this.expeditionSyncing()) return "syncing";
+    if (this.cloudStatus() === "pending" || this.cloudStatus() === "conflict" || this.expeditionError() || !this.connectionAvailable()) return "error";
+    if (this.cloudStatus() === "loading" || !this.accountSynchronized()) return "syncing";
+    return this.cloudStatus() === "saved" ? "saved" : "idle";
+  }
+  async retrySyncModal(): Promise<void> {
+    await this.retryCloudSave();
+    await this.retryExpedition();
   }
   cloudLabel(): string {
     if (this.temporary())
