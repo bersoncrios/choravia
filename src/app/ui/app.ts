@@ -1,4 +1,5 @@
 import { SyncModalComponent, type SyncModalState } from "./sync-modal/sync-modal.js";
+import { SaveToastComponent } from "./save-toast/save-toast.js";
 import { LiveOpsPanelComponent } from "./live-ops-panel.js";
 import { applyLiveContent } from "../application/live-content.js";
 import { BADGE_SYMBOLS, isCustomAccessoryId, type LiveContent, type PlayerBadge, type LiveOpsRequest, type CustomAccessoryId } from "../domain/live-ops.js";
@@ -81,10 +82,13 @@ interface Preferences {
 @Component({
   selector: "ww-app",
   standalone: true,
-  imports: [OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent, SyncModalComponent],
+  imports: [OnlinePanelComponent, WelcomePageComponent, LiveOpsPanelComponent, SyncModalComponent, SaveToastComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
   <ww-sync-modal [state]="syncModalState()" (exportState)="exportSave()" (retry)="retrySyncModal()" />
+  @if (!presentation() && accountAccessPresent() && accountSynchronized()) {
+    <ww-save-toast [status]="cloudStatus()" />
+  }
   @if (presentation()) {
     <ww-welcome-page [authenticated]="!!profile()" (enterGame)="enterJourney()" />
   }
@@ -1772,6 +1776,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
   syncModalState(): SyncModalState {
     if (this.presentation() || !this.accountAccessPresent() || !this.profile() || !this.game().avatar || !this.game().starterChosen) return "idle";
+    // Once the initial account reconciliation completes, background saves never reopen the modal.
+    if (this.accountSynchronized()) return "saved";
     if (this.cloudBusy() || this.cloudStatus() === "saving" || this.expeditionSyncing()) return "syncing";
     if (this.cloudStatus() === "pending" || this.cloudStatus() === "conflict" || this.expeditionError() || !this.connectionAvailable()) return "error";
     if (this.cloudStatus() === "loading" || !this.accountSynchronized()) return "syncing";

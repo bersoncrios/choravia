@@ -37,7 +37,7 @@ export class SaveToastComponent implements OnDestroy {
   @Input({ required: true })
   set status(status: CloudStatus) {
     if (status === "pending" || status === "conflict") this.show("failure");
-    else if (status === "saved" && this.kind() !== "failure") this.show("success");
+    else if (status === "saved") this.show("success");
   }
 
   private show(kind: "success" | "failure"): void {
