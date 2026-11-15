@@ -184,13 +184,15 @@ export class Renderer {
       const factor = reduced ? 1 : Math.min(1, dt * 22);
       this.shown.x += (g.player.x - this.shown.x) * factor;
       this.shown.y += (g.player.y - this.shown.y) * factor;
-      const width = this.canvas.clientWidth;
-      const zoom = width > 0 && width < 520 ? Math.min(1.3, 520 / width) : 1;
+      const zoom = 1.5;
+      const worldWidth = 480, worldHeight = 360;
+      const cameraWidth = worldWidth / zoom, cameraHeight = worldHeight / zoom;
+      const clampCamera = (value: number, maximum: number) => Math.max(0, Math.min(maximum, value));
+      const cameraX = clampCamera(this.shown.x * 24 + 12 - cameraWidth / 2, worldWidth - cameraWidth);
+      const cameraY = clampCamera(this.shown.y * 24 + 12 - cameraHeight / 2, worldHeight - cameraHeight);
       ctx.save();
-      if (zoom > 1) {
-        ctx.translate(240 - (this.shown.x * 24 + 12) * zoom, 180 - (this.shown.y * 24 + 12) * zoom);
-        ctx.scale(zoom, zoom);
-      }
+      ctx.translate(-cameraX * zoom, -cameraY * zoom);
+      ctx.scale(zoom, zoom);
       this.drawMap(g, time, reduced);
       if (field?.state) this.drawField(g, field.state, field.cycle, time, reduced);
       this.drawFieldEnvironment(g, time, reduced);

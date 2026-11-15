@@ -102,7 +102,7 @@ interface Preferences {
   @if (presentation()) {
     <ww-welcome-page [authenticated]="!!profile()" (enterGame)="enterJourney()" />
   }
-  <div class="app-shell" [style.display]="presentation() ? 'none' : null" [attr.inert]="presentation() ? '' : null" [class.reduced-motion]="prefs().reduced" [class.drawer-open]="!!sidePanel()">
+  <div class="app-shell" [style.display]="presentation() ? 'none' : null" [attr.inert]="presentation() ? '' : null" [class.reduced-motion]="prefs().reduced" [class.drawer-open]="!!sidePanel()" [class.game-active]="!presentation() && !!profile()">
     @for (notice of feedbackNotices(); track notice.id) {
       <div class="feedback-toast" role="status" aria-live="polite">✧ {{ notice.text }}</div>
     }
@@ -455,6 +455,20 @@ interface Preferences {
                 </button>
               </div>
             }
+            @if (battleView().scene === "exploration") {
+              <div class="dpad" aria-label="Controle de movimento touch">
+                @for (dir of directions; track dir.label) {
+                  <button
+                    [class]="dir.class"
+                    [attr.aria-label]="dir.label"
+                    (pointerdown)="hold($event, dir.dx, dir.dy)"
+                    (pointerup)="release()"
+                    (pointercancel)="release()"
+                    (lostpointercapture)="release()"
+                  >{{ dir.icon }}</button>
+                }
+              </div>
+            }
           </div>
           <div class="message-bar" role="status" aria-live="polite">
             <span>✧</span>
@@ -600,20 +614,6 @@ interface Preferences {
               >
                 ✧ Recuperar no marco
               </button>
-              </div>
-              <div class="dpad" aria-label="Controle de movimento touch">
-                @for (dir of directions; track dir.label) {
-                  <button
-                    [class]="dir.class"
-                    [attr.aria-label]="dir.label"
-                    (pointerdown)="hold($event, dir.dx, dir.dy)"
-                    (pointerup)="release()"
-                    (pointercancel)="release()"
-                    (lostpointercapture)="release()"
-                  >
-                    {{ dir.icon }}
-                  </button>
-                }
               </div>
             </div>
           }

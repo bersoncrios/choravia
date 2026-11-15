@@ -150,3 +150,9 @@ Nas respostas de trabalho, começar com o papel em uso, por exemplo `### [AGENTE
 - Browser audio test foi ajustado para evitar dependência do fluxo de onboarding e do ganho instantâneo de `AudioParam`; agora verifica comandos aceitos/rejeitados usando o reducer e caminho de apresentação real.
 - Alterações desta continuação não foram publicadas. Emuladores usaram somente `demo-wildwoods`; nenhuma conta de produção foi consultada ou alterada. Não houve commit/push nesta continuação.
 - Próximos passos: avaliar em aparelhos e ouvido humano; seguir para P1.5 editorial do GM e primeira região nova, uma entrega por vez. Corrigir o GM em produção exige publicar frontend e Rules compatíveis com autorização explícita.
+
+## Continuação — enquadramento e controles touch
+
+- Canvas agora segue o personagem com zoom 1,5, interpola a câmera com o movimento e limita o enquadramento às bordas do mapa. Batalhas continuam sem pan de exploração.
+- Na sessão de jogo, o título introdutório e o rodapé cedem espaço; o header fica sticky; a largura do mapa responde à altura disponível, preserva 4:3 e reduz a descrição secundária do objetivo em telas baixas. O direcional touch fica sobre a área visível do mapa em celulares e tablets, sem depender de rolar até a barra de controles.
+- Build AOT/Vite e `git diff --check` aprovados. Aviso existente do chunk principal acima de 500 kB permanece. Não foram executados testes automatizados de navegador nesta alteração visual. Sem publicação.

@@ -2039,6 +2039,45 @@ footer > small { font: 11px var(--font-body); letter-spacing: .08em; }
   footer { gap: 16px; }
 }
 
+/* Keep the expedition compact while the map follows the player. */
+.app-shell.game-active { min-height: 100dvh; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+.game-active > .intro, .game-active > footer { display: none; }
+.game-active .masthead { position: sticky; top: 0; z-index: 40; background: var(--color-bg); }
+.game-active .game-layout { width: 100%; max-width: 1080px; margin: clamp(4px, 1dvh, 12px) auto; }
+.game-active .game-panel { position: relative; min-width: 0; }
+.game-active .viewport {
+  width: min(100%, clamp(220px, calc(133.33dvh - 586.65px), 960px));
+  margin-inline: auto;
+  aspect-ratio: 4 / 3;
+}
+.game-active .exploration-controls { padding-block: 8px; }
+.game-active .message-bar { min-height: 52px; padding-block: 9px; }
+.game-active .viewport > .dpad {
+  position: absolute;
+  z-index: 7;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+  padding: 6px;
+  border: 1px solid #bcd69366;
+  border-radius: 14px;
+  background: #0b1918c9;
+  box-shadow: 0 5px 20px #0005;
+  backdrop-filter: blur(4px);
+}
+@media (max-width: 1000px), (pointer: coarse) {
+  .game-active .viewport > .dpad { display: grid; }
+}
+@media (max-height: 650px) {
+  .game-active .masthead { min-height: 60px; padding-block: 6px; }
+  .game-active .current-objective { padding: 8px 12px; }
+  .game-active .current-objective > strong { margin-block: 3px; font-size: 15px; }
+  .game-active .current-objective p { display: none; }
+  .game-active .scene-heading { min-height: 46px; padding: 7px 12px; }
+  .game-active .message-bar { min-height: 42px; padding: 6px 10px; }
+  .game-active .exploration-controls { padding: 5px 8px; }
+  .game-active .context-actions .quiet-button { min-height: 40px; }
+}
+
 /* Secondary expedition content opens on demand, leaving the map in focus. */
 .game-layout { grid-template-columns: minmax(0, 1fr); max-width: 1000px; margin-inline: auto; }
 .expedition-menu-button { min-height: 44px; font-weight: 600; border-color: var(--color-accent); }
