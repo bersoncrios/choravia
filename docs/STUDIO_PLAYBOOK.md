@@ -161,3 +161,12 @@ Nas respostas de trabalho, começar com o papel em uso, por exemplo `### [AGENTE
 
 - Encontros selvagens locais e online agora sorteiam nível uniforme inclusivo de 1 até o nível do Eco ativo; o HP do adversário é criado com os atributos daquele nível, e a mensagem de chegada informa o nível. A geração online usa seed do encontro criado pelo backend; a local usa o PRNG persistido do save. Em nível 1 o resultado permanece 1 sem consumir sorteio extra.
 - NPCs, revanches, batalhas já salvas e compatibilidade tática não mudam. A validação/build aceita a alteração; build AOT/Vite e `git diff --check` passaram. Não foram executados testes automatizados nesta alteração. Sem publicação.
+
+## Continuação — Brejo dos Pirilampos, Lumisco e trilha de exploração
+
+- Primeiro destino novo integrado ao circuito: após a Gruta das Marés, o Arco das Marés agora leva ao **Brejo dos Pirilampos**, e o portal do Brejo retorna à Clareira. Região, visita, layout, encontros, sons, mapa e Diário dos Ecos usam IDs novos e aditivos; saves anteriores continuam válidos.
+- Adicionado **Lumisco (WW006)**, Eco Elétrico disponível nos encontros do Brejo e no catálogo/Diário, sem alterar os cinco iniciais. Habilidade clássica, batalha tática, troca/sincronização e validação online usam o catálogo estendido. Firestore Rules locais reconhecem a espécie e balanceamento GM; ainda não publicadas.
+- O canal do Brejo contém puzzle de três refletores em ordem fixa. Estado fica em `fieldRestorations`; sequência inválida não altera o save, pode ser resolvida com Lumisco/qualquer Eco Elétrico ou manualmente, e revela uma ponte visual opcional quando concluída.
+- Trilhas diárias podem sortear “Siga uma trilha nova”. Progresso só é registrado após uma transição de portal aceita, em vez de contar passos ou apenas abrir o mapa.
+- Validação final: `npm test` passou **165/165**; Rules/contas/recompensas em emuladores demo passaram **14/14**; Chromium do Diário confirmou cinco regiões/seis Ecos, travessia, layouts 320/390/768/1360 px e gerou `artifacts/firefly-marsh.png`; `npm run build` e `git diff --check` aprovados. Captura visual revisada. Vite mantém o aviso existente de bundle principal acima de 500 kB.
+- Ainda propostos: coleta renovável específica do Brejo, NPC/missão, segredo, Serra dos Ecos, Ruínas do Primeiro Coro, mais espécies, puzzles/rotas reutilizáveis e outras trilhas verificáveis. Nada foi publicado nem houve alteração de dados de produção.

@@ -26,7 +26,7 @@ test("portal traversal records source and destination, preserves circuit and sur
   assert.deepEqual(game.journal!.regions, REGION_ORDER);
   const restored = decodeCloudRecord({schemaVersion: 1, revision: 1, writeId: "journal-save-001", snapshot: encodeSnapshot(game)}).snapshot;
   assert.deepEqual(restored.journal, game.journal);
-  assert.equal(journalView(restored).visitedCount, 4);
+  assert.equal(journalView(restored).visitedCount, 5);
 });
 test("observing a duel records its opponent after fleeing and returning without awarding ownership", () => {
   let game = reduceGame(initialGame(12), {type: "chooseStarter", speciesId: "WW001"});

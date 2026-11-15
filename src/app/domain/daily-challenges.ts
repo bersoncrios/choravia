@@ -2,7 +2,8 @@ export type DailyContractType =
   | "resolve-encounter"
   | "move-in-battle"
   | "defend-in-battle"
-  | "basic-attack";
+  | "basic-attack"
+  | "visit-region";
 
 export interface DailyContract {
   readonly id: DailyContractType;
@@ -48,6 +49,13 @@ const REQUIRED_CONTRACT: DailyTemplate = {
   target: 1,
 };
 const TACTICAL_TEMPLATES: readonly DailyTemplate[] = [
+  {
+    id: "visit-region",
+    title: "Siga uma trilha nova",
+    description: "Atravesse um portal e descubra outra região nesta expedição.",
+    rewardSeeds: 8,
+    target: 1,
+  },
   {
     id: "move-in-battle",
     title: "Use sua estratégia",

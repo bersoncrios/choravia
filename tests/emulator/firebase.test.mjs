@@ -441,7 +441,7 @@ test("single expedition migration works under real Rules without duplicate start
   assert.equal(state.creatures.length, 2);
   assert.equal(state.creatures.find(c => c.id === first.mapping[0].id).speciesId, "WW003");
   const board = await a.call("getDailyBoard", {});
-  const input = { cycleId: board.cycleId, types: ["resolve-encounter", "move-in-battle", "defend-in-battle", "basic-attack"] };
+  const input = { cycleId: board.cycleId, types: ["resolve-encounter", "move-in-battle", "defend-in-battle", "basic-attack", "visit-region"] };
   await a.call("recordExpeditionDaily", input);
   const completed = await a.call("getDailyBoard", {});
   await a.call("recordExpeditionDaily", input);

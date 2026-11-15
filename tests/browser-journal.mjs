@@ -37,15 +37,15 @@ try {
   await page.getByRole("button", { name: /Começar com/ }).click();
   await page.getByRole("dialog", { name: "Escolha seu Eco inicial" }).waitFor({ state: "hidden" });
   await openJournal();
-  await panel.getByText("1 / 4 regiões visitadas · 1 / 5 espécies observadas", { exact: true }).waitFor();
+  await panel.getByText("1 / 5 regiões visitadas · 1 / 6 espécies observadas", { exact: true }).waitFor();
   assert.equal(await panel.locator(".journal").evaluate(el => getComputedStyle(el).display), "grid");
   assert.equal(await panel.locator(".journal-region").first().evaluate(el => getComputedStyle(el).backgroundColor), "rgb(245, 244, 232)");
   assert.equal(await panel.locator('.journal-region[aria-current="location"]').count(), 1);
-  assert.deepEqual(await panel.locator(".journal-region h4").allTextContents(), ["Clareira do Primeiro Canto", "Clareira Antiga", "Trilha das Copas", "Gruta das Marés"]);
+  assert.deepEqual(await panel.locator(".journal-region h4").allTextContents(), ["Clareira do Primeiro Canto", "Clareira Antiga", "Trilha das Copas", "Gruta das Marés", "Brejo dos Pirilampos"]);
   assert.match(await panel.locator(".journal-region").last().innerText(), /Próximo portal → Clareira do Primeiro Canto/);
-  assert.equal(await panel.getByText("Ainda não visitada", { exact: true }).count(), 3);
+  assert.equal(await panel.getByText("Ainda não visitada", { exact: true }).count(), 4);
   await ecoSection();
-  assert.equal(await panel.getByRole("heading", { name: "Eco ainda não observado", exact: true }).count(), 4);
+  assert.equal(await panel.getByRole("heading", { name: "Eco ainda não observado", exact: true }).count(), 5);
   await panel.getByRole("heading", { name: "Braseco", exact: true }).waitFor();
   assert.equal(await panel.getByRole("heading", { name: "Gotril", exact: true }).count(), 0);
   assert.equal(await panel.getByText("Jato d’água", { exact: true }).count(), 0);
@@ -61,7 +61,7 @@ try {
     a.session.state = next; a.game.set(next);
   });
   await mapSection();
-  await panel.getByText("2 / 4 regiões visitadas · 1 / 5 espécies observadas", { exact: true }).waitFor();
+  await panel.getByText("2 / 5 regiões visitadas · 1 / 6 espécies observadas", { exact: true }).waitFor();
   assert.match(await panel.locator('.journal-region[aria-current="location"]').innerText(), /Clareira Antiga/);
 
   // A real NPC challenge observes a species; JSON recovery retains it while not owning it.
@@ -82,9 +82,9 @@ try {
     return species(npc.speciesId).name;
   });
   await ecoSection();
-  await panel.getByText("2 / 4 regiões visitadas · 2 / 5 espécies observadas", { exact: true }).waitFor();
+  await panel.getByText("2 / 5 regiões visitadas · 2 / 6 espécies observadas", { exact: true }).waitFor();
   await panel.getByRole("heading", { name: observedName, exact: true }).waitFor();
-  assert.equal(await panel.getByRole("heading", { name: "Eco ainda não observado", exact: true }).count(), 3);
+  assert.equal(await panel.getByRole("heading", { name: "Eco ainda não observado", exact: true }).count(), 4);
   await panel.getByRole("button", { name: "Observados", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll("ww-journal-panel .journal-eco").length === 2);
   await panel.getByRole("button", { name: "Na coleção", exact: true }).click();
@@ -92,7 +92,7 @@ try {
   await panel.getByRole("heading", { name: "Braseco", exact: true }).waitFor();
   assert.equal(await panel.getByRole("heading", { name: observedName, exact: true }).count(), 0);
   await panel.getByRole("button", { name: "Todos", exact: true }).click();
-  await page.waitForFunction(() => document.querySelectorAll("ww-journal-panel .journal-eco").length === 5);
+  await page.waitForFunction(() => document.querySelectorAll("ww-journal-panel .journal-eco").length === 6);
   await page.locator(".feedback-toast").waitFor({state:"hidden"});
 
   for (const [width, height] of [[320,568],[390,844],[768,1024],[1360,900]]) {
@@ -111,8 +111,16 @@ try {
   await page.keyboard.press("Escape");
   await drawer.waitFor({state:"hidden"});
   await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Abrir menu da expedição");
+  await page.evaluate(() => {
+    const a = window.ng.getComponent(document.querySelector("ww-app"));
+    const marsh = {...a.game(), region:"firefly-marsh", scene:"exploration", battle:null, player:{x:10,y:10}};
+    a.session.state = marsh; a.game.set(marsh);
+  });
+  await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).game().region === "firefly-marsh");
+  await page.waitForTimeout(180);
+  await page.locator("canvas").screenshot({path:"artifacts/firefly-marsh.png"});
   assert.deepEqual(errors, []);
-  console.log("Journal browser passed: circuit/current/visited states, hidden discoveries, starter, real portal and NPC commands, JSON recovery, filters, focus, inline styles and four responsive sizes.");
+  console.log("Journal browser passed: five-region circuit, six Ecos, hidden discoveries, real portal/NPC commands, focus, four responsive sizes and Brejo Canvas capture.");
 } catch (error) {
   console.log(await page.evaluate(() => ({body:document.body.innerText.slice(-2500),errors:[]})).catch(() => null));
   throw error;

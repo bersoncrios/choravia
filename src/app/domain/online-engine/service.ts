@@ -160,7 +160,7 @@ export class GameService {
       }
       case "recordExpeditionDaily": {
         const d = object(input, ["cycleId", "types"]);
-        if (typeof d["cycleId"] !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d["cycleId"]) || !Array.isArray(d["types"]) || d["types"].length > 4 || !d["types"].every(type => ["resolve-encounter", "move-in-battle", "defend-in-battle", "basic-attack"].includes(String(type)))) return fail("invalid-argument", "Objetivos inválidos.");
+        if (typeof d["cycleId"] !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d["cycleId"]) || !Array.isArray(d["types"]) || d["types"].length > 5 || !d["types"].every(type => ["resolve-encounter", "move-in-battle", "defend-in-battle", "basic-attack", "visit-region"].includes(String(type)))) return fail("invalid-argument", "Objetivos inválidos.");
         if (d["cycleId"] !== this.localCycle(this.clock.now()).id) return fail("failed-precondition", "As trilhas do dia foram renovadas. Atualize a expedição.");
         await this.store.transaction(async tx => {
           await this.user(tx, uid);
@@ -672,7 +672,7 @@ export class GameService {
       state.activeId = creatureId;
       state.captured = u.firstCaptureEncounterId ? 1 : 0;
       const enemy = u.firstCaptureEncounterId
-        ? (SPECIES[Math.floor(randomFromSeed(seed) * 5)]?.id ?? "WW002")
+        ? (SPECIES[Math.floor(randomFromSeed(seed) * SPECIES.length)]?.id ?? "WW002")
         : "WW002";
       const enemyLevel = wildEncounterLevel(creatureLevel(state.collection[0]!), nextRandom(seed).value);
       state.scene = "battle";

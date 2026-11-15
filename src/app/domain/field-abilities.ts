@@ -1,6 +1,6 @@
 import { activeCreature, distance, layoutIn, mapTile, REGION_ORDER, REGION_PORTALS, species, type Element, type Game, type Position, type Region } from "./game.js";
 
-export const FIELD_MECHANISM_IDS = ["clearing-lantern", "old-grove-garden", "tide-waterwheel", "canopy-beacon", "tide-bridge"] as const;
+export const FIELD_MECHANISM_IDS = ["clearing-lantern", "old-grove-garden", "tide-waterwheel", "canopy-beacon", "tide-bridge", "marsh-lantern-1", "marsh-lantern-2", "marsh-lantern-3"] as const;
 export type FieldMechanismId = (typeof FIELD_MECHANISM_IDS)[number];
 export interface FieldMechanism extends Position {
   id: FieldMechanismId; name: string; element: Element; region: Region;
@@ -13,6 +13,9 @@ const DEFINITIONS: readonly Definition[] = [
   { id: "tide-waterwheel", name: "Roda da primeira chuva", element: "water", region: "tide-cavern", anchor: {x: 11,y: 6}, description: "O canal antigo espera um impulso para voltar a movimentar sua roda.", completedText: "A roda voltou a cantar com a água da gruta.", manualLabel: "Desobstruir o canal à mão", ecoLabel: "Movimentar com Água" },
   { id: "canopy-beacon", name: "Farol das copas", element: "electric", region: "canopy-trail", anchor: {x: 15,y: 5}, description: "Um farol apagado pode voltar a orientar quem atravessa as copas.", completedText: "O farol das copas voltou a iluminar a travessia.", manualLabel: "Ajustar o refletor à mão", ecoLabel: "Energizar com Elétrico" },
   { id: "tide-bridge", name: "Ponte dos passos", element: "earth", region: "tide-cavern", anchor: {x: 7,y: 8}, description: "Pedras soltas guardam uma travessia opcional sobre o canal oeste.", completedText: "As pedras se firmaram: uma ponte agora atravessa o canal oeste.", manualLabel: "Encaixar as pedras à mão", ecoLabel: "Reconstruir com Terra" },
+  { id: "marsh-lantern-1", name: "Primeiro refletor", element: "electric", region: "firefly-marsh", anchor: {x: 8,y: 7}, description: "A luz mais baixa aponta para o norte. Reacenda os refletores seguindo o rastro de vaga-lumes.", completedText: "Primeiro refletor aceso. A luz aponta para o caminho central.", manualLabel: "Ajustar o primeiro refletor", ecoLabel: "Acender com Elétrico" },
+  { id: "marsh-lantern-2", name: "Refletor central", element: "electric", region: "firefly-marsh", anchor: {x: 10,y: 6}, description: "O segundo refletor responde à luz que vem do lado oeste.", completedText: "Refletor central aceso. Resta seguir o último ponto de luz.", manualLabel: "Ajustar o refletor central", ecoLabel: "Acender com Elétrico" },
+  { id: "marsh-lantern-3", name: "Refletor da travessia", element: "electric", region: "firefly-marsh", anchor: {x: 12,y: 8}, description: "A última luz encara o canal. Complete a sequência para revelar as pedras seguras.", completedText: "As três luzes se alinharam e revelaram uma passagem segura pelo canal.", manualLabel: "Ajustar o último refletor", ecoLabel: "Acender com Elétrico" },
 ];
 const cache = new WeakMap<Game, FieldMechanism[]>();
 const walkable = (x: number,y: number,region: Region) => ["ground","grass","path","healer","gate"].includes(mapTile(x,y,region));
@@ -53,5 +56,6 @@ export function fieldMechanismReady(game: Game, mechanism: FieldMechanism): bool
 }
 export function explorationTile(game: Game,x: number,y: number): ReturnType<typeof mapTile> {
   if(game.region==="tide-cavern"&&game.fieldRestorations?.includes("tide-bridge")&&y===8&&x>=4&&x<=6) return "path";
+  if(game.region==="firefly-marsh"&&["marsh-lantern-1","marsh-lantern-2","marsh-lantern-3"].every(id=>game.fieldRestorations?.includes(id))&&y===7&&x>=5&&x<=7) return "path";
   return mapTile(x,y,game.region??"clearing");
 }

@@ -15,6 +15,7 @@ const REGIONS: Record<Region, {subtitle: string; activities: string[]}> = {
   "old-grove": {subtitle: "Pedras de escuta entre raízes e memórias antigas.", activities: ["Ouvir a memória do marco", "Ativar os selos de Fogo, Elétrico e Terra", "Explorar e desafiar duelistas"]},
   "canopy-trail": {subtitle: "Folhagem densa, caminhos altos e poças de seiva.", activities: ["Explorar os caminhos entre as copas", "Encontrar vasos e duelistas", "Recuperar os Ecos no marco"]},
   "tide-cavern": {subtitle: "Canais frios e cristais nas sombras da gruta.", activities: ["Explorar os caminhos entre os canais", "Encontrar vasos e duelistas", "Retornar à primeira clareira pelo portal"]},
+  "firefly-marsh": {subtitle: "Canais rasos, juncos e luzes que indicam caminhos esquecidos.", activities: ["Seguir as pistas luminosas", "Reacender a rota sobre o canal", "Encontrar Lumisco e pesquisar seu habitat"]},
 };
 const MEMORIES: Record<SpeciesId, string> = {
   WW001: "Aquece ninhos abandonados e guarda a memória das fogueiras de viajantes.",
@@ -22,6 +23,7 @@ const MEMORIES: Record<SpeciesId, string> = {
   WW003: "Guarda o som da primeira chuva nos bigodes que lembram gotas d’água.",
   WW004: "Corre antes do trovão e às vezes se assusta com o próprio espirro.",
   WW005: "Descansa nas antigas encruzilhadas e conserva a lembrança dos passos esquecidos.",
+  WW006: "Acende as trilhas alagadas e responde aos refletores com pulsos de luz dourada.",
 };
 /** Read-only guide: habitat lists come from the same catalog that generates encounters. */
 export function journalView(game: Game): JournalView {

@@ -20,7 +20,9 @@ export function reconcileExpedition(game: Game, inventory: ValidatedCreature[], 
   return { ...game, journal: mergeJournals(game, {...game, collection}), ...(game.scene === "result" && activeMissing ? { scene: "exploration" as const, battle: null, message: "O Eco foi transferido em outra sessão. Sua expedição foi sincronizada e a batalha encerrada." } : {}), collection, captured: Math.max(game.captured, collection.length - 1), activeId: collection.some(c => c.id === desired) ? desired : (collection.find(c => c.hp > 0) ?? collection[0]!).id };
 }
 export function dailyActionTypes(before: Game, after: Game, command: Command): DailyContractType[] {
-  if (before === after || before.scene !== "battle" || !before.battle || !!before.battle.rematch) return [];
+  if (before === after) return [];
+  if (before.scene === "exploration" && after.scene === "exploration" && before.region !== after.region) return ["visit-region"];
+  if (before.scene !== "battle" || !before.battle || !!before.battle.rematch) return [];
   const types: DailyContractType[] = [];
   if (command.type === "basic") types.push("basic-attack");
   if (command.type === "defend") types.push("defend-in-battle");
@@ -31,7 +33,7 @@ export function dailyActionTypes(before: Game, after: Game, command: Command): D
 export function dailyCycle(now = Date.now()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
-const TYPES = ["resolve-encounter", "move-in-battle", "defend-in-battle", "basic-attack"] as const;
+const TYPES = ["resolve-encounter", "move-in-battle", "defend-in-battle", "basic-attack", "visit-region"] as const;
 export class DailyActionQueue {
   constructor(private storage: Pick<Storage, "getItem" | "setItem" | "removeItem">) {}
   private key(uid: string): string { return `choravia-daily-actions:${uid}`; }

@@ -16,7 +16,7 @@ test("all five field mechanisms are deterministic, reachable and avoid legacy ob
     const game=ready(seed), original=JSON.stringify(game), found:string[]=[];
     for(const region of REGION_ORDER) {
       const area={...game,region}, mechanisms=fieldMechanisms(area), layout=area.worldLayouts![region]!;
-      assert.equal(mechanisms.length,region==="tide-cavern"?2:1);
+      assert.equal(mechanisms.length,region==="tide-cavern"?2:region==="firefly-marsh"?3:1);
       assert.deepEqual(mechanisms,fieldMechanisms({...area}));
       for(const mechanism of mechanisms) {
         found.push(mechanism.id);
@@ -31,7 +31,8 @@ test("all five field mechanisms are deterministic, reachable and avoid legacy ob
 test("every elemental restoration and free manual alternative produces the same persistent world change",()=>{
   for(const region of REGION_ORDER) for(const mechanism of fieldMechanisms({...ready(3),region})) {
     const base=ready(3,elements[mechanism.element]!);
-    const game={...base,region,player:{x:mechanism.x,y:mechanism.y}};
+    const prior=region==="firefly-marsh"?({"marsh-lantern-1":[],"marsh-lantern-2":["marsh-lantern-1"],"marsh-lantern-3":["marsh-lantern-1","marsh-lantern-2"]} as Record<string,string[]>)[mechanism.id]??[]:[];
+    const game={...base,region,player:{x:mechanism.x,y:mechanism.y},fieldRestorations:prior};
     assert.ok(fieldMechanismReady(game,mechanism));
     const elemental=reduceGame(game,{type:"restoreEnvironment",id:mechanism.id,method:"eco"});
     const manual=reduceGame(game,{type:"restoreEnvironment",id:mechanism.id,method:"manual"});
@@ -64,6 +65,22 @@ test("restored tide bridge changes only optional channel tiles and remains valid
   const loaded=JSON.parse(JSON.stringify(restored)); assert.ok(isGame(loaded));
   assert.equal(isGame({...loaded,fieldRestorations:[]}),false);
   for(const region of REGION_ORDER) assert.equal(explorationTile({...restored,region},REGION_PORTALS[region].position.x,REGION_PORTALS[region].position.y),"gate");
+});
+test("marsh route requires the three lights in sequence and preserves progress in a save",()=>{
+  const base={...ready(33,"WW004"),region:"firefly-marsh" as const};
+  const mechanisms=fieldMechanisms(base).sort((a,b)=>a.id.localeCompare(b.id));
+  assert.deepEqual(mechanisms.map(m=>m.id),["marsh-lantern-1","marsh-lantern-2","marsh-lantern-3"]);
+  const second={...base,player:{x:mechanisms[1]!.x,y:mechanisms[1]!.y}};
+  assert.equal(reduceGame(second,{type:"restoreEnvironment",id:mechanisms[1]!.id,method:"eco"}),second);
+  assert.equal(explorationTile(base,6,7),"water");
+  let game: Game=base;
+  for(const mechanism of mechanisms) {
+    game={...game,player:{x:mechanism.x,y:mechanism.y}};
+    game=reduceGame(game,{type:"restoreEnvironment",id:mechanism.id,method:"eco"});
+    assert.ok(isGame(game));
+  }
+  assert.equal(explorationTile(game,6,7),"path");
+  assert.deepEqual(game.fieldRestorations,mechanisms.map(m=>m.id));
 });
 test("first duel keeps its rewards while repeat training awards only personal records and goals",()=>{
   let game=duelist();

@@ -213,7 +213,7 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
     }
-    function species(value) { return value in ['WW001','WW002','WW003','WW004','WW005']; }
+    function species(value) { return value in ['WW001','WW002','WW003','WW004','WW005','WW006']; }
     function validId(value) { return value is string && value.matches('^[A-Za-z0-9_-]{8,100}$'); }
     function onlineState(d) {
       return d.keys().hasAll(['schemaVersion','createdAt','inventoryRevision','starterGranted','firstCaptureEncounterId','activeEncounterId','activeTradeId','lastEncounterAt'])
@@ -458,7 +458,7 @@ service cloud.firestore {
     }
     match /eco_balance/{id} {
       allow read: if signedIn();
-      allow create, update: if admin() && id in ['WW001','WW002','WW003','WW004','WW005']
+      allow create, update: if admin() && id in ['WW001','WW002','WW003','WW004','WW005','WW006']
         && request.resource.data.keys().hasOnly(['id','hp','attack','defense','revision','updatedBy','updatedAt','auditId'])
         && request.resource.data.id == id && contentMeta(request.resource.data)
         && request.resource.data.hp is int && request.resource.data.hp >= 20 && request.resource.data.hp <= 200

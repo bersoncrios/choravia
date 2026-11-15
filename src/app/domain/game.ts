@@ -6,7 +6,7 @@ import type { StoreItemId } from "./store.js";
 import { explorationTile, fieldMechanisms, fieldMechanismReady } from "./field-abilities.js";
 
 export type Element = "fire" | "plant" | "water" | "electric" | "earth";
-export type SpeciesId = "WW001" | "WW002" | "WW003" | "WW004" | "WW005";
+export type SpeciesId = "WW001" | "WW002" | "WW003" | "WW004" | "WW005" | "WW006";
 export interface Species {
   readonly id: SpeciesId;
   readonly name: string;
@@ -68,6 +68,7 @@ export const SPECIES: readonly Species[] = [
     color: "#c39c75",
     glyph: "◆",
   },
+  { id: "WW006", name: "Lumisco", element: "electric", hp: 35, attack: 10, defense: 8, color: "#e8ed8a", glyph: "✦" },
 ];
 export const ELEMENT_NAMES: Record<Element, string> = {
   fire: "Fogo",
@@ -119,14 +120,15 @@ export interface Creature {
   cosmeticId?: "eco-moss-glyph";
 }
 export type Terrain = "ground" | "grass" | "water" | "fire";
-export type Region = "clearing" | "old-grove" | "canopy-trail" | "tide-cavern";
-export const REGION_ORDER: readonly Region[] = ["clearing", "old-grove", "canopy-trail", "tide-cavern"];
+export type Region = "clearing" | "old-grove" | "canopy-trail" | "tide-cavern" | "firefly-marsh";
+export const REGION_ORDER: readonly Region[] = ["clearing", "old-grove", "canopy-trail", "tide-cavern", "firefly-marsh"];
 /** Normal wild encounters. The first guided encounter separately introduces Brotatu. */
 export const REGION_ENCOUNTERS: Readonly<Record<Region, readonly SpeciesId[]>> = {
   clearing: ["WW001", "WW002", "WW004"],
   "old-grove": ["WW002", "WW003", "WW005"],
   "canopy-trail": ["WW001", "WW002", "WW004"],
   "tide-cavern": ["WW002", "WW003", "WW005"],
+  "firefly-marsh": ["WW003", "WW004", "WW006"],
 };
 export interface ExplorationJournal { regions: Region[]; species: SpeciesId[] }
 export const REGION_NAMES: Readonly<Record<Region, string>> = {
@@ -134,13 +136,15 @@ export const REGION_NAMES: Readonly<Record<Region, string>> = {
   "old-grove": "Clareira Antiga",
   "canopy-trail": "Trilha das Copas",
   "tide-cavern": "Gruta das Marés",
+  "firefly-marsh": "Brejo dos Pirilampos",
 };
 export interface RegionPortal { readonly position: Position; readonly arrival: Position; readonly target: Region; readonly title: string; }
 export const REGION_PORTALS: Readonly<Record<Region, RegionPortal>> = {
   clearing: { position: { x: 17, y: 10 }, arrival: { x: 16, y: 10 }, target: "old-grove", title: "Portal das Raízes" },
   "old-grove": { position: { x: 2, y: 10 }, arrival: { x: 3, y: 10 }, target: "canopy-trail", title: "Passagem das Copas" },
   "canopy-trail": { position: { x: 17, y: 10 }, arrival: { x: 16, y: 10 }, target: "tide-cavern", title: "Elevador de Seiva" },
-  "tide-cavern": { position: { x: 2, y: 10 }, arrival: { x: 5, y: 10 }, target: "clearing", title: "Arco das Marés" },
+  "tide-cavern": { position: { x: 2, y: 10 }, arrival: { x: 5, y: 10 }, target: "firefly-marsh", title: "Arco das Marés" },
+  "firefly-marsh": { position: { x: 17, y: 10 }, arrival: { x: 16, y: 10 }, target: "clearing", title: "Trilha dos Pirilampos" },
 };
 export interface Cell {
   terrain: Terrain;
@@ -159,7 +163,7 @@ export interface EnemyPlan {
   action: "basic" | "skill" | "defend";
 }
 export function classicAttackPower(action: "basic" | "skill", level: number): number { return (action === "skill" ? 7 : 6) + Math.floor((Math.max(1, Math.min(30, level)) - 1) / 6); }
-export const SKILL_NAMES: Record<SpeciesId, string> = { WW001: "Faísca", WW002: "Chicote de folha", WW003: "Jato d’água", WW004: "Estalo", WW005: "Impacto de pedra" };
+export const SKILL_NAMES: Record<SpeciesId, string> = { WW001: "Faísca", WW002: "Chicote de folha", WW003: "Jato d’água", WW004: "Estalo", WW005: "Impacto de pedra", WW006: "Clarão de vaga-lume" };
 export interface TurnFrame { action?: "basic" | "skill" | "defend" | "capture" | "flee"; actor: "player" | "enemy"; ally: Fighter; enemy: Fighter; message: string }
 export interface Battle {
   /** Repeatable practice never grants Sementes, XP, captures or daily rewards. */
@@ -357,6 +361,14 @@ export function mapTile(
     if ((x * 11 + y * 5) % 15 === 0) return "wall";
     return "ground";
   }
+  if (region === "firefly-marsh") {
+    if (x === 10 && y === 10) return "healer";
+    if ((x >= 5 && x <= 7 && y >= 4 && y <= 8) || (x >= 12 && x <= 14 && y >= 5 && y <= 7)) return "water";
+    if (x === 10 || y === 10 || x === 8 && y >= 6 && y <= 10 || x === 4 && y >= 8 && y <= 10) return "path";
+    if (x >= 13 && x <= 15 && y >= 3 && y <= 4) return "grass";
+    if ((x * 5 + y * 7) % 19 === 0) return "wall";
+    return "ground";
+  }
   return "wall";
 }
 export interface Pot {
@@ -377,6 +389,7 @@ const POT_LOCATIONS: Readonly<Record<Region, readonly Position[]>> = {
   ],
   "canopy-trail": [],
   "tide-cavern": [],
+  "firefly-marsh": [],
 };
 export interface MapNpc { readonly id: string; readonly name: string; readonly x: number; readonly y: number; readonly speciesId: SpeciesId; readonly reward: number; }
 export interface RegionLayout { readonly pots: readonly Pot[]; readonly npcs: readonly MapNpc[]; }
@@ -911,6 +924,11 @@ export function reduceGame(previous: Game, command: Command): Game {
       const mechanism = fieldMechanisms(g).find(m=>m.id===command.id);
       if (!mechanism || distance(g.player,mechanism)>1 || (g.fieldRestorations ?? []).includes(mechanism.id)
         || !["eco","manual"].includes(command.method) || command.method === "eco" && !fieldMechanismReady(g,mechanism)) return reject();
+      const marshSequence = ["marsh-lantern-1", "marsh-lantern-2", "marsh-lantern-3"];
+      if (mechanism.region === "firefly-marsh" && marshSequence[(g.fieldRestorations ?? []).filter(id => marshSequence.includes(id)).length] !== mechanism.id) {
+        g.message = "Os vaga-lumes indicam uma ordem: reacenda primeiro o refletor mais baixo.";
+        return reject();
+      }
       g.fieldRestorations = [...(g.fieldRestorations ?? []),mechanism.id];
       g.message = mechanism.completedText;
       return commit();
@@ -1189,7 +1207,7 @@ export function reduceGame(previous: Game, command: Command): Game {
       return reject();
     if (
       command.type === "skill" &&
-      !["WW001", "WW004"].includes(b.ally.speciesId)
+      !["WW001", "WW004", "WW006"].includes(b.ally.speciesId)
     )
       return reject();
     resolveAttack(b, "ally", command.type, command.target);

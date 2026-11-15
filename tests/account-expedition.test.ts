@@ -100,7 +100,7 @@ test("single expedition records daily contracts idempotently and rejects past cy
   const f = fixture(); await f.call("alice", "bootstrap", {});
   const board = await f.call("alice", "getDailyBoard", {});
   const input = { cycleId: board.cycleId, types: ["resolve-encounter", "move-in-battle", "defend-in-battle", "basic-attack"] };
-  await f.call("alice", "recordExpeditionDaily", input);
+  await f.call("alice", "recordExpeditionDaily", { ...input, types: [...input.types, "visit-region"] });
   const first = await f.call("alice", "getDailyBoard", {});
   await f.call("alice", "recordExpeditionDaily", input);
   assert.deepEqual(await f.call("alice", "getDailyBoard", {}), first);

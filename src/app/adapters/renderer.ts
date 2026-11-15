@@ -74,6 +74,9 @@ const PIXELS: Record<SpeciesId, readonly string[]> = {
     ".oo...oo.",
     ".........",
   ],
+  WW006: [
+    "..o...o..", "...o.o...", ".o.oooo.o", "..ooooo..", "oowowwoo.", "..ooooo..", "...ooo...", "..o...o..", ".........",
+  ],
 };
 export function drawCreature(
   ctx: CanvasRenderingContext2D,
@@ -237,6 +240,7 @@ export class Renderer {
     const ancient = region === "old-grove";
     const cavern = region === "tide-cavern";
     const canopy = region === "canopy-trail";
+    const marsh = region === "firefly-marsh";
     const layout = layoutIn(g, region);
     const pots = layout.pots.filter(
       (pot) => !(g.brokenPots ?? []).includes(pot.id),
@@ -249,16 +253,16 @@ export class Renderer {
         const noise = (x * 17 + y * 11) % 7;
         c.fillStyle =
           t === "path"
-            ? cavern ? "#788788" : canopy ? "#a0966b" : ancient ? "#867d68" : "#aa9b6c"
+            ? cavern ? "#788788" : marsh ? "#9d9870" : canopy ? "#a0966b" : ancient ? "#867d68" : "#aa9b6c"
             : t === "grass"
-              ? cavern ? "#607d81" : ancient ? "#637e5d" : canopy ? "#648950" : "#528450"
+              ? cavern ? "#607d81" : marsh ? "#597b50" : ancient ? "#637e5d" : canopy ? "#648950" : "#528450"
               : t === "water"
-                ? cavern ? "#315b78" : canopy ? "#739b69" : "#427f8e"
+                ? cavern ? "#315b78" : marsh ? "#397b7a" : canopy ? "#739b69" : "#427f8e"
                 : t === "wall"
                   ? ancient
                     ? "#273d3a"
                     : "#193d37"
-                  : cavern ? "#344b59" : canopy ? "#42674c" : ancient ? "#4a604d" : "#356347";
+                  : cavern ? "#344b59" : marsh ? "#315d4c" : canopy ? "#42674c" : ancient ? "#4a604d" : "#356347";
         c.fillRect(px, py, 24, 24);
         this.terrainDetails(g, x, y, t, noise);
         if (t === "grass") {
@@ -266,7 +270,8 @@ export class Renderer {
             const gx = px + 3 + ((n * 7 + noise) % 20),
               gy = py + 6 + ((n * 9) % 18);
             const wind = reduced ? 0 : Math.sin(time / 900 + x + y) * 1.4;
-            c.fillStyle = n % 2 ? (cavern ? "#9cb8b2" : canopy ? "#a0bd77" : "#8db66a") : (cavern ? "#3f5962" : "#284f3c");
+            c.fillStyle = n % 2 ? (cavern ? "#9cb8b2" : marsh ? "#b0c874" : canopy ? "#a0bd77" : "#8db66a") : (cavern ? "#3f5962" : "#284f3c");
+            if (marsh && (x * 7 + y * 11 + n * 3) % 13 === 0) { c.fillStyle = "#f5e88a"; c.globalAlpha = reduced ? 0.55 : 0.35 + (Math.sin(time / 280 + x + n) + 1) * 0.25; c.fillRect(gx, gy - 3, 2, 2); c.globalAlpha = 1; }
             c.fillRect(gx, gy, 2, 6);
             c.fillRect(gx - 2 + wind, gy - 2, 2, 4);
             c.fillRect(gx + 2, gy - 1, 2, 4);
@@ -442,6 +447,7 @@ export class Renderer {
     const c = this.ctx;
     const restorations = g.fieldRestorations ?? [];
     if (g.region === "tide-cavern") this.drawTideBridge(restorations.includes("tide-bridge"));
+    if (g.region === "firefly-marsh") this.drawMarshLights(restorations);
     for (const mechanism of fieldMechanisms(g)) {
       const restored = restorations.includes(mechanism.id);
       const x = mechanism.x * 24, y = mechanism.y * 24;
@@ -550,6 +556,26 @@ export class Renderer {
       c.restore();
     }
   }
+  private drawMarshLights(restorations: readonly string[]): void {
+    const c = this.ctx, ids = ["marsh-lantern-1", "marsh-lantern-2", "marsh-lantern-3"];
+    const count = ids.filter(id => restorations.includes(id)).length;
+    const y = 7 * 24;
+    c.save();
+    for (let i = 0; i < count; i++) {
+      c.globalAlpha = 0.4;
+      c.fillStyle = "#eff087";
+      c.fillRect((5 + i) * 24 + 7, y + 5, 10, 14);
+    }
+    c.globalAlpha = 1;
+    if (count === 3) {
+      for (let i = 0; i < 3; i++) {
+        c.fillStyle = i % 2 ? "#b7aa78" : "#948d66";
+        c.fillRect((5 + i) * 24, y + 7, 24, 10);
+        c.fillStyle = "#e6dc9d"; c.fillRect((5 + i) * 24 + 2, y + 7, 20, 2);
+      }
+    }
+    c.restore();
+  }
   private drawFlower(x: number, y: number, petals: string): void {
     const c = this.ctx;
     c.fillStyle = "#55845c"; c.fillRect(x, y + 2, 1, 4);
@@ -583,6 +609,7 @@ export class Renderer {
       "old-grove": { frame: "#405f47", highlight: "#a6bf79", glow: "#c2e39a" },
       "canopy-trail": { frame: "#327a55", highlight: "#90d68d", glow: "#80f0ad" },
       "tide-cavern": { frame: "#456d91", highlight: "#a6d7ed", glow: "#65d9f2" },
+      "firefly-marsh": { frame: "#506b3d", highlight: "#d9e88a", glow: "#eaff8a" },
     }[region];
     c.fillStyle = "#10262b";
     c.fillRect(x + 6, y + 7, 12, 15);
@@ -628,24 +655,24 @@ export class Renderer {
   }
   private terrainDetails(g: Game, x: number, y: number, tile: ReturnType<typeof explorationTile>, noise: number): void {
     const c = this.ctx, px = x * 24, py = y * 24, region = g.region ?? "clearing";
-    const cavern = region === "tide-cavern", ancient = region === "old-grove", canopy = region === "canopy-trail";
+    const cavern = region === "tide-cavern", ancient = region === "old-grove", canopy = region === "canopy-trail", marsh = region === "firefly-marsh";
     if (tile === "path") {
       // Borders use the exact exploration terrain, including the restored bridge.
-      c.fillStyle = cavern ? "#4d6469" : "#6e7955";
+      c.fillStyle = cavern ? "#4d6469" : marsh ? "#536d4d" : "#6e7955";
       if (explorationTile(g, x, y - 1) !== "path") c.fillRect(px, py, 24, 2);
       if (explorationTile(g, x, y + 1) !== "path") c.fillRect(px, py + 22, 24, 2);
       if (explorationTile(g, x - 1, y) !== "path") c.fillRect(px, py, 2, 24);
       if (explorationTile(g, x + 1, y) !== "path") c.fillRect(px + 22, py, 2, 24);
-      c.fillStyle = cavern ? "#98aaa6" : "#baac7e";
+      c.fillStyle = cavern ? "#98aaa6" : marsh ? "#b6b17b" : "#baac7e";
       c.fillRect(px + 6 + noise, py + 14, 4, 2);
       c.fillStyle = cavern ? "#586e74" : "#8e855e";
       c.fillRect(px + 16, py + 5 + noise, 2, 1);
       if (ancient && noise % 3 === 0) { c.fillStyle = "#6f7754"; c.fillRect(px + 4, py + 17, 4, 1); }
     } else if (tile === "water") {
-      c.fillStyle = cavern ? "#213e59" : canopy ? "#4c6b53" : "#2b5964";
+      c.fillStyle = cavern ? "#213e59" : marsh ? "#234d51" : canopy ? "#4c6b53" : "#2b5964";
       if (explorationTile(g, x, y - 1) !== "water") c.fillRect(px, py, 24, 3);
       if (explorationTile(g, x - 1, y) !== "water") c.fillRect(px, py, 3, 24);
-      c.fillStyle = cavern ? "#8bb1bc" : "#8caaa0";
+      c.fillStyle = cavern ? "#8bb1bc" : marsh ? "#93c6a2" : "#8caaa0";
       if (explorationTile(g, x, y + 1) !== "water") c.fillRect(px + 2, py + 22, 20, 1);
       if (explorationTile(g, x + 1, y) !== "water") c.fillRect(px + 22, py + 3, 1, 18);
     } else if (tile === "ground" || tile === "grass") {
@@ -704,7 +731,7 @@ export class Renderer {
     c.save(); c.globalAlpha = 0.7;
     for (let x = Math.max(0, Math.floor(this.shown.x) - 1); x <= Math.min(19, Math.floor(this.shown.x) + 1); x++) {
       if (explorationTile(g, x, nextRow) !== "wall") continue;
-      c.fillStyle = region === "old-grove" ? "#3d6350" : region === "canopy-trail" ? "#46805a" : "#346c49";
+      c.fillStyle = region === "old-grove" ? "#3d6350" : region === "canopy-trail" ? "#46805a" : region === "firefly-marsh" ? "#426849" : "#346c49";
       c.fillRect(x * 24 + 4, nextRow * 24 - 3, 16, 6);
       c.fillStyle = "#86a56c"; c.fillRect(x * 24 + 9, nextRow * 24 - 2, 6, 1);
     }
@@ -818,6 +845,7 @@ export class Renderer {
       else if (id === "WW002") c.rotate(Math.sin(phase * 0.65) * 0.035);
       else if (id === "WW003") c.scale(1 + Math.sin(phase) * 0.035, 1 - Math.sin(phase) * 0.025);
       else if (id === "WW004") c.translate(Math.sin(phase * 4) * Math.pow(Math.max(0, Math.sin(phase)), 8) * 1.5, 0);
+      else if (id === "WW006") { c.translate(0, Math.sin(phase * 1.6) * 0.8); c.scale(1 + Math.sin(phase * 1.6) * 0.025, 1 - Math.sin(phase * 1.6) * 0.025); }
       else c.translate(0, Math.sin(phase * 0.45) * 0.6);
     }
     drawCreature(c, id, 0, 0, scale); c.restore();

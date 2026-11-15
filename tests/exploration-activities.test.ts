@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { initialGame, reduceGame, layoutIn, createBattle, type Game } from "../src/app/domain/game.js";
 import { activitiesView } from "../src/app/application/exploration-activities.js";
 import { dailyActionTypes } from "../src/app/application/account-expedition.js";
+import { REGION_PORTALS } from "../src/app/domain/game.js";
 
 test("activities guide reflects restorations and personal training records without mutating the snapshot", () => {
   const game = reduceGame(initialGame(827361), {type: "chooseStarter", speciesId: "WW001"});
   const npc = layoutIn(game,"clearing").npcs[0]!;
   const fixture: Game = {...game, fieldRestorations: ["clearing-lantern", "tide-bridge"], npcDuelWins: [npc.id], trainingRecords: {[npc.id]: {wins: 2, bestRound: 3, goals: ["skill"]}}};
   const original = JSON.stringify(fixture), view = activitiesView(fixture);
-  assert.equal(view.mechanisms.length, 5); assert.equal(view.restored, 2);
+  assert.equal(view.mechanisms.length, 8); assert.equal(view.restored, 2);
   const training = view.training.find(n => n.id === npc.id)!;
   assert.equal(training.wins, 2); assert.equal(training.bestRound, 3);
   assert.equal(training.skill, true); assert.equal(training.guard, false); assert.equal(training.unlocked, true);
@@ -27,4 +28,13 @@ test("training actions and victories never advance the daily challenge queue", (
   const after = reduceGame(ending, {type: "basic", target: battle.enemy.pos});
   assert.equal(after.scene,"result");
   assert.deepEqual(dailyActionTypes(ending, after, {type:"basic",target:battle.enemy.pos}), []);
+});
+test("the exploration trail advances only after an accepted portal crossing",()=>{
+  let game=reduceGame(initialGame(202),{type:"chooseStarter",speciesId:"WW001"});
+  const portal=REGION_PORTALS.clearing;
+  game={...game,player:{x:portal.position.x-1,y:portal.position.y}};
+  const next=reduceGame(game,{type:"walk",dx:1,dy:0});
+  assert.equal(next.region,portal.target);
+  assert.deepEqual(dailyActionTypes(game,next,{type:"walk",dx:1,dy:0}),["visit-region"]);
+  assert.deepEqual(dailyActionTypes(game,game,{type:"walk",dx:1,dy:0}),[]);
 });

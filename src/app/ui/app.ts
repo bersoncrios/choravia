@@ -208,7 +208,7 @@ interface Preferences {
         <div class="character-creator-card starter-creator-card">
           <p class="eyebrow">SEU PRIMEIRO VÍNCULO</p>
           <h1 id="starter-title">Escolha seu Eco inicial</h1>
-          <p>Todos os cinco estão disponíveis. Cada um tem um elemento e um jeito diferente de lutar.</p>
+          <p>Os cinco Ecos iniciais estão disponíveis. Cada um tem um elemento e um jeito diferente de lutar.</p>
           <div class="starter-choices">
             @for (eco of catalog; track eco.id) {
               <button
@@ -493,7 +493,7 @@ interface Preferences {
               >
                 ⚔ <span>Atacar</span>
               </button>
-              @if (classicBattle() || ["WW001", "WW004"].includes(battleView().battle!.ally.speciesId)) {
+              @if (classicBattle() || ["WW001", "WW004", "WW006"].includes(battleView().battle!.ally.speciesId)) {
                 <button
                   [class.selected]="selection() === 'skill'"
                   (click)="chooseBattleAction('skill')"
@@ -1045,7 +1045,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   readonly xpToNextLevel = xpToNextLevel;
   readonly elementNames = ELEMENT_NAMES;
   readonly regionNames = REGION_NAMES;
-  get catalog() { return SPECIES.map(eco => ({ ...eco, ...this.game().balance?.[eco.id] })); }
+  get catalog() { return SPECIES.filter(eco => eco.id !== "WW006").map(eco => ({ ...eco, ...this.game().balance?.[eco.id] })); }
   readonly rows = [0, 1, 2, 3, 4];
   readonly directions = [
     { label: "Cima", icon: "↑", dx: 0, dy: -1, class: "up" },
@@ -1466,7 +1466,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       )
         this.selection.set("move");
       if (this.game().scene !== "exploration") this.release();
-      if (["move", "basic", "defend", "flee", "capture", "skill"].includes(command.type))
+      if (["move", "basic", "defend", "flee", "capture", "skill"].includes(command.type) || command.type === "walk" && this.game().region !== before.region)
         await this.refreshDailyBoard();
       return;
     }
@@ -1482,7 +1482,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (this.game() !== before) {
       const board = this.dailyBoard();
       const types = dailyActionTypes(before, this.game(), command).filter(type => !board || board.cycleId !== dailyCycle() || board.contracts.some(c => c.id === type && !c.completed));
-      if (types.length && this.accountAccess) {
+          if (types.length && this.accountAccess) {
         try { this.dailyActions.add(this.accountAccess.profile.uid, types); }
         catch { this.dailyError.set("Não foi possível guardar o envio das trilhas neste navegador. Mantenha a conexão e tente sincronizar."); }
         void this.flushDailyActions();
@@ -2220,7 +2220,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     return layoutIn(g, g.region ?? "clearing").npcs.find((npc) => distance(g.player, npc) <= 1) ?? null;
   }
   regionSubtitle(): string {
-    return `${["clearing", "old-grove", "canopy-trail", "tide-cavern"].indexOf(this.game().region ?? "clearing") + 1} · EXPLORAÇÃO`;
+    return `${["clearing", "old-grove", "canopy-trail", "tide-cavern", "firefly-marsh"].indexOf(this.game().region ?? "clearing") + 1} · EXPLORAÇÃO`;
   }
   rivalWon(): boolean {
     const npc = this.nearbyNpc();

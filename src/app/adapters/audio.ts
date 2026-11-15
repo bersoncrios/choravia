@@ -18,6 +18,7 @@ const PALETTES = {
   "old-grove": { notes: [294, 349, 440, 392, 349, 294, 262, 294], root: 147, air: 880, shape: "triangle" as const },
   "canopy-trail": { notes: [440, 554, 659, 554, 494, 440, 370, 440], root: 220, air: 1480, shape: "sine" as const },
   "tide-cavern": { notes: [262, 311, 392, 349, 311, 262, 233, 262], root: 131, air: 660, shape: "sine" as const },
+  "firefly-marsh": { notes: [330, 392, 494, 587, 494, 392, 349, 330], root: 165, air: 1760, shape: "triangle" as const },
 };
 const clamp = (value: number): number => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
 

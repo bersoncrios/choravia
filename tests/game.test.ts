@@ -41,12 +41,14 @@ test("PRNG golden vectors and nonzero state", () => {
     s = r.seed;
   }
 });
-test("all 25 elemental pairs: one strength and one resistance per element", () => {
+test("all species matchups: one strength and one resistance per element", () => {
+  const advantage: Record<string,string> = {fire:"plant",plant:"earth",earth:"electric",electric:"water",water:"fire"};
   for (const a of SPECIES) {
     const row = SPECIES.map((d) => elementalMultiplier(a.element, d.element));
-    assert.equal(row.filter((x) => x === 1.5).length, 1);
-    assert.equal(row.filter((x) => x === 0.75).length, 1);
-    assert.equal(row.filter((x) => x === 1).length, 3);
+    const counter = Object.keys(advantage).find(element=>advantage[element]===a.element)!;
+    assert.equal(row.filter((x) => x === 1.5).length, SPECIES.filter(s=>s.element===advantage[a.element]).length);
+    assert.equal(row.filter((x) => x === 0.75).length, SPECIES.filter(s=>s.element===counter).length);
+    assert.equal(row.filter((x) => x === 1).length, SPECIES.length - row.filter((x)=>x!==1).length);
     assert.equal(elementalMultiplier("neutral", a.element), 1);
   }
 });

@@ -12,7 +12,7 @@ test("objective follows recovery, first capture, seals and collection", () => {
   g.captured = 1;
   assert.match(explorationObjective(g).title, /selo/);
   g.ancientMarkerHeard = true;
-  assert.match(explorationObjective(g).title, /1\/5/);
+  assert.match(explorationObjective(g).title, /1\/6/);
 });
 
 test("combat guidance distinguishes neutral attacks, elemental skills and movement", () => {
