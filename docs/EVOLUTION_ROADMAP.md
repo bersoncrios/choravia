@@ -120,3 +120,9 @@ O ciclo de coleta, mochila, receita e restauração foi implementado localmente.
 ## Continuação — Diário dos Ecos e mapa de regiões
 
 P1.2 implementado localmente: circuito dos portais, regiões visitadas, observação de espécies, habitats, habilidades e marcos em Menu → Mapa e diário. Descobertas persistem no save e sobrevivem à retirada de criaturas por troca. Migração não inventa histórico ausente. Detalhes e validação em [EXPLORATION_JOURNAL.md](EXPLORATION_JOURNAL.md). Próximo bloco do roteiro: habilidades de campo e revanche de duelistas (P1.3), com pré-condições e limites de recompensa definidos antes da implementação.
+
+## Atualização — P1.3 e P1.4 locais
+
+P1.3 (habilidades de campo e treino) e P1.4 (primeira camada de áudio e polimento dos quatro mapas) estão implementados no repositório e validados localmente. Registro dos testes, capturas e limites: [FIELD_ABILITIES_AND_TRAINING.md](FIELD_ABILITIES_AND_TRAINING.md) e [AUDIO_AND_MAP_POLISH.md](AUDIO_AND_MAP_POLISH.md). O P1.5 continua pendente como evolução editorial do GM: catálogo de materiais/loot, pontos renováveis, missões, eventos agendados, rascunho/publicação versionada e reversão.
+
+Correção emergencial de UX no GM: o motivo exigido por operações de conta e pelo editor de conteúdo agora é um único campo sincronizado, visível antes da seleção de jogador; o painel explica as precondições de save. Chromium do GM e 14 integrações do emulador aprovados. Regras e frontend ainda precisam de publicação compatível autorizada para refletir qualquer alteração fora do repositório. Nada foi publicado e nenhuma conta de produção foi alterada.

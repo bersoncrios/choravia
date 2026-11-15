@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, signal } from "@angular/core";
 import { SPECIES, type SpeciesId } from "../domain/game.js";
 import { BADGE_SYMBOLS, EMPTY_LIVE_CONTENT, type LiveContent, type LiveOpsRequest, type LiveOpsResult, type CustomAccessory, type BadgeDefinition, type BalanceEntry, type AccessoryShape, type BadgeSymbol, type ContentAuditEntry } from "../domain/live-ops.js";
 @Component({
@@ -6,7 +6,8 @@ import { BADGE_SYMBOLS, EMPTY_LIVE_CONTENT, type LiveContent, type LiveOpsReques
  template: `
  <section class="live-ops-editor" aria-label="Conteúdo e eventos">
   <h3>Conteúdo e eventos</h3><p class="store-note">Publique peças na loja, ajuste atributos e reconheça jogadores. Alterações de atributos entram fora de batalhas em andamento.</p>
-  <label>Motivo da alteração<input [value]="reason()" (input)="reason.set($any($event.target).value)" minlength="5" maxlength="240" placeholder="Ex.: evento de aniversário da floresta" /></label>
+  <label>Motivo da alteração (compartilhado)<input aria-label="Motivo administrativo compartilhado" [value]="reason" (input)="reasonChange.emit($any($event.target).value)" minlength="5" maxlength="240" placeholder="Ex.: evento de aniversário da floresta" aria-describedby="live-ops-reason-help" /></label>
+  <small id="live-ops-reason-help" class="live-ops-help">Esse motivo também vale para concessões de Sementes, cosméticos e redefinições. Mínimo de 5 caracteres.</small>
   <details><summary>Acessórios da loja</summary>
    <div class="live-ops-list">@for (item of content.accessories; track item.id) { <button (click)="accessory.set(copy(item))" [disabled]="busy()">{{ item.name }} · {{ item.active ? 'Publicado' : 'Retirado' }}</button> }</div>
    <button (click)="newAccessory()" [disabled]="busy()">Novo acessório</button>
@@ -50,12 +51,14 @@ import { BADGE_SYMBOLS, EMPTY_LIVE_CONTENT, type LiveContent, type LiveOpsReques
 export class LiveOpsPanelComponent {
  @Input() content: LiveContent = EMPTY_LIVE_CONTENT;
  @Input() targetUid: string | null = null;
+ @Input() reason = "";
+ @Output() readonly reasonChange = new EventEmitter<string>();
  @Input() loadAudit!: () => Promise<ContentAuditEntry[]>;
  readonly audit = signal<ContentAuditEntry[]>([]);
  async refreshAudit() { this.busy.set(true); this.error.set(""); try { this.audit.set(await this.loadAudit()); } catch (e) { this.error.set((e as Error).message); } finally { this.busy.set(false); } }
  @Input() execute!: (request: LiveOpsRequest) => Promise<LiveOpsResult>;
  readonly species = SPECIES; readonly symbols = BADGE_SYMBOLS;
- readonly reason = signal(""); readonly grantUid = signal(""); readonly busy = signal(false); readonly message = signal(""); readonly error = signal("");
+ readonly grantUid = signal(""); readonly busy = signal(false); readonly message = signal(""); readonly error = signal("");
  readonly accessory = signal<CustomAccessory>(this.accessoryDraft());
  readonly badge = signal<BadgeDefinition>(this.badgeDraft());
  readonly balance = signal<BalanceEntry>({ id: "WW001", hp: 36, attack: 10, defense: 7, revision: 0 });
@@ -71,7 +74,7 @@ export class LiveOpsPanelComponent {
  patchBadge<K extends keyof BadgeDefinition>(key: K, value: BadgeDefinition[K]) { this.badge.update(v => ({ ...v, [key]: value })); }
  patchBalance(key: "hp" | "attack" | "defense", value: number) { this.balance.update(v => ({ ...v, [key]: value })); }
  selectBalance(id: SpeciesId) { const saved = this.content.balance.find(v => v.id === id), base = SPECIES.find(v => v.id === id)!; this.balance.set(saved ? this.copy(saved) : { id, hp: base.hp, attack: base.attack, defense: base.defense, revision: 0 }); }
- canSave() { return !this.busy() && this.reason().trim().length >= 5; }
+ canSave() { return !this.busy() && this.reason.trim().length >= 5; }
  async saveAccessory() { const v = this.copy(this.accessory()); if (await this.run({ method: "saveAccessory", value: v })) this.accessory.set({ ...v, revision: v.revision + 1 }); }
  async saveBalance() { const v = this.copy(this.balance()); if (await this.run({ method: "saveBalance", value: v })) this.balance.set({ ...v, revision: v.revision + 1 }); }
  async saveBadge() { const v = this.copy(this.badge()); if (await this.run({ method: "saveBadge", value: v })) this.badge.set({ ...v, revision: v.revision + 1 }); }
@@ -79,9 +82,10 @@ export class LiveOpsPanelComponent {
  private async run(payload: { method: "saveAccessory"; value: CustomAccessory } | { method: "saveBalance"; value: BalanceEntry } | { method: "saveBadge"; value: BadgeDefinition } | { method: "grantBadge"; badgeId: string; targetUid: string }): Promise<boolean> {
   if (!this.canSave()) return false;
   this.busy.set(true); this.error.set(""); this.message.set("");
-  const key = JSON.stringify({ ...payload, reason: this.reason().trim() });
+  const reason = this.reason.trim();
+  const key = JSON.stringify({ ...payload, reason });
   const requestId = this.ids.get(key) ?? crypto.randomUUID(); this.ids.set(key, requestId);
-  try { const result = await this.execute({ ...payload, requestId, reason: this.reason().trim() }); this.message.set(result.replay ? "Operação já confirmada. Nenhuma duplicação realizada." : "Operação confirmada e registrada no histórico administrativo."); return true; }
+  try { const result = await this.execute({ ...payload, requestId, reason }); this.message.set(result.replay ? "Operação já confirmada. Nenhuma duplicação realizada." : "Operação confirmada e registrada no histórico administrativo."); return true; }
   catch (error) { this.error.set(error instanceof Error ? error.message : "Não foi possível confirmar. Tente novamente com os mesmos dados."); return false; }
   finally { this.busy.set(false); }
  }

@@ -36,7 +36,12 @@ try {
  await page.getByRole("button", { name: "GM", exact: true }).click();
  const gm = page.getByRole("dialog", { name: "Painel Game Master", exact: true });
  const editor = gm.locator("ww-live-ops-panel");
- await editor.getByLabel("Motivo da alteração", { exact: true }).fill("Festival de boas-vindas");
+ const sharedReason = editor.getByLabel("Motivo administrativo compartilhado", { exact: true });
+ await sharedReason.fill("Festival de boas-vindas");
+ assert.equal(await gm.getByLabel("Motivo administrativo compartilhado", { exact: true }).first().inputValue(), "Festival de boas-vindas");
+ await gm.getByLabel("Motivo administrativo compartilhado", { exact: true }).first().fill("Evento geral compartilhado");
+ assert.equal(await sharedReason.inputValue(), "Evento geral compartilhado");
+ await sharedReason.fill("Festival de boas-vindas");
  await editor.locator("summary").filter({ hasText: "Acessórios da loja" }).click();
  await editor.getByLabel("Nome do acessório", { exact: true }).fill("Coroa de evento");
  await editor.getByLabel("Descrição do acessório", { exact: true }).fill("Um presente para celebrar a floresta.");

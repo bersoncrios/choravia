@@ -2080,6 +2080,7 @@ body:has(.app-shell.drawer-open:not([inert])) { overflow: hidden; }
 .live-ops-editor details[open] > summary::before { content: '▾'; }
 .live-ops-editor label, .live-ops-form { display: grid; gap: 8px; }
 .live-ops-editor label { font-size: 13px; margin-top: 14px; color: var(--color-muted); }
+.live-ops-help, .gm-form-help { display: block; margin-top: 6px; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
 .live-ops-editor input, .live-ops-editor select, .live-ops-editor textarea { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font: 14px var(--font-body); }
 .live-ops-editor textarea { min-height: 80px; resize: vertical; }
 .live-ops-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }

@@ -35,4 +35,12 @@ A execução continua no cliente, sob a arquitetura atual de Firestore direto. E
 - A interface explica a alternativa manual, os objetivos e a ausência de recompensas econômicas no treino.
 - Navegador 320/390/768/1360 px, teclado/E, touch e movimento reduzido permanecem utilizáveis.
 
-Resultados reais de testes e capturas serão registrados após a validação.
+## Validação local concluída
+
+- `npm test`: suíte completa com 163 testes unitários/aplicação aprovada, incluindo regras de domínio, saves antigos e recuperação.
+- Chromium de atividades aprovado em 320/390/768/1360 px, cobrindo os cinco mecanismos, alternativa manual, ponte salva/recarregada, recompensa do primeiro duelo, revanches sem economia, objetivos, registros e captura bloqueada.
+- Regressões Chromium de combate e diário aprovadas contra a versão atual.
+- Capturas da ponte antes/depois e do diário em `artifacts/activities-*.png`; a revisão visual usa a mesma câmera e seed.
+- Build AOT/Vite aprovado; permanece aviso do bundle principal acima de 500 kB. Sem homologação em aparelho físico.
+
+Sem publicação, commit ou alteração de dados de produção nesta etapa.

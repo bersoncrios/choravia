@@ -922,6 +922,7 @@ interface Preferences {
               <label>Ou busque pelo nome<input [value]="gmNameQuery()" (input)="gmNameQuery.set($any($event.target).value)" (keydown.enter)="searchGameMasterPlayers()" autocomplete="off" placeholder="Digite ao menos 2 letras" /></label>
               <button (click)="searchGameMasterPlayers()" [disabled]="gmBusy() || gmNameQuery().trim().length < 2">{{ gmBusy() ? "Buscando…" : "Buscar nome" }}</button>
             </div>
+            <label>Motivo obrigatório (compartilhado)<input aria-label="Motivo administrativo compartilhado" [value]="gmReason()" (input)="gmReason.set($any($event.target).value)" minlength="5" maxlength="240" placeholder="Ex.: compensação por falha de sincronização" /><small>Este mesmo motivo habilita as alterações de conteúdo. Mínimo de 5 caracteres.</small></label>
             @if (gmSearchResults().length) {
               <div class="gm-search-results" aria-label="Resultados da busca por nome">
                 @for (candidate of gmSearchResults(); track candidate.uid) {
@@ -934,7 +935,7 @@ interface Preferences {
                 <div class="gm-player-heading"><div><small>CONTA</small><h3>{{ player.displayName || "Guardião sem nome" }}</h3><code>{{ player.uid }}</code></div><span>{{ player.hasSave ? "Save encontrado" : "Sem save" }}</span></div>
                 <div class="gm-stats"><span><small>SEMENTES</small><strong>{{ player.seeds ?? "—" }}</strong></span><span><small>REGIÃO</small><strong>{{ player.region ?? "—" }}</strong></span><span><small>ECOS NA CONTA</small><strong>{{ player.collection.length }}</strong></span><span><small>INICIAL</small><strong>{{ player.starterChosen === null ? "—" : player.starterChosen ? "Escolhido" : "Pendente" }}</strong></span></div>
                 <p class="gm-collection">{{ collectionNames(player.collection) }}</p>
-                <label>Motivo obrigatório<input [value]="gmReason()" (input)="gmReason.set($any($event.target).value)" maxlength="240" placeholder="Ex.: compensação por falha de sincronização" /></label>
+                @if (!player.hasSave) { <p class="gm-form-help" role="status">Este jogador não tem save na nuvem; Sementes, cosméticos e redefinição ficam indisponíveis. Badges podem ser concedidas pelo UID.</p> }
                 <div class="gm-actions">
                   <div class="gm-seed-action"><input type="number" min="1" max="5000" [value]="gmAmount()" (input)="gmAmount.set(+$any($event.target).value)" aria-label="Quantidade de Sementes" /><button (click)="grantGameMasterSeeds()" [disabled]="gmBusy() || !player.hasSave || !gmReason().trim()">Conceder Sementes</button></div>
                   <details><summary>Conceder cosmético</summary><div class="gm-cosmetics">@for (item of storeItems; track item.id) { <button (click)="grantGameMasterCosmetic(item.id)" [disabled]="gmBusy() || !player.hasSave || player.ownedItems.includes(item.id) || !gmReason().trim()">{{ player.ownedItems.includes(item.id) ? item.name + " · já possui" : item.name }}</button> }</div></details>
@@ -942,7 +943,7 @@ interface Preferences {
                 </div>
               </article>
             }
-            <ww-live-ops-panel [content]="liveContent() || emptyLiveContent" [targetUid]="gmPlayer()?.uid || null" [execute]="executeLiveOps" [loadAudit]="loadLiveOpsAudit" />
+            <ww-live-ops-panel [content]="liveContent() || emptyLiveContent" [targetUid]="gmPlayer()?.uid || null" [reason]="gmReason()" (reasonChange)="gmReason.set($event)" [execute]="executeLiveOps" [loadAudit]="loadLiveOpsAudit" />
             @if (gmMessage()) { <p class="gm-message" role="status">{{ gmMessage() }}</p> }
             @if (gmError()) { <p class="online-error" role="alert">{{ gmError() }}</p> }
             <div class="gm-audit-heading"><h3>Últimas ações</h3><button (click)="loadGameMasterAudit()" [disabled]="gmBusy()">{{ gmAuditLoaded() ? "Atualizar" : "Carregar histórico" }}</button></div>

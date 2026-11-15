@@ -52,3 +52,9 @@ Validação desta correção: build de produção e Chromium de interface em set
 ## Conteúdo e eventos
 
 O painel agora inclui criação/edição de acessórios visuais para a loja, publicação de PV/ataque/defesa por espécie e criação/concessão manual de badges. Definições, limites, uso, Rules e validação em [GM_LIVE_OPS.md](GM_LIVE_OPS.md). Badges e auditoria de conteúdo ficam fora do save pessoal; a alteração exige publicar Rules e frontend compatíveis juntos.
+
+### Motivo e estado dos formulários
+
+O motivo administrativo é compartilhado entre concessões de conta e edição de conteúdo. Ele fica visível mesmo antes de selecionar um jogador, e a interface informa que são necessários pelo menos cinco caracteres. Concessões de Sementes, cosméticos e reset explicam quando o jogador não possui save na nuvem; a concessão de badge aceita UID e não exige save. Se uma operação estiver em andamento, os botões permanecem desabilitados até a resposta, com erro exposto no próprio painel quando a operação falha.
+
+Validação local após essa correção: painel Chromium verificou sincronização dos dois campos de motivo, publicação de acessório/balanceamento/badge, concessão de badge, compra/equipamento e quatro larguras; 14 integrações Auth/Firestore no emulador passaram, incluindo autorização real pelas Rules, revisão concorrente, auditoria atômica e idempotência. Isso valida o código e Rules locais; não confirma a versão hospedada nem as Rules de produção. Frontend e Rules compatíveis precisam ser publicados juntos para disponibilizar a correção.

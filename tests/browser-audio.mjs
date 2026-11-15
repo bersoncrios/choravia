@@ -34,14 +34,13 @@ const prefs = () => page.evaluate(()=>window.ng.getComponent(document.querySelec
 async function boot() {
   await page.goto(new URL("/jogar",process.env.BASE_URL??"http://127.0.0.1:5173").href);
   await page.waitForFunction(()=>window.ng?.getComponent(document.querySelector("ww-app"))?.loaded());
-  await page.evaluate(()=>{
+  await page.evaluate(async()=>{
     const a=window.ng.getComponent(document.querySelector("ww-app"));
     a.receiveAccount=()=>{};a.profile.set({uid:"audio-test",name:"Guardiã de teste",email:"audio@example.invalid",photoURL:null});a.cloudStatus.set("saved");
+    const {initialGame}=await import("/src/app/domain/game.ts"),{DEFAULT_AVATAR}=await import("/src/app/domain/avatar.ts");
+    const g=initialGame(827361);g.avatar={...DEFAULT_AVATAR};g.starterChosen=true;
+    await a.session.replaceState(g);a.game.set(g);
   });
-  const creator=page.getByRole("button",{name:"Começar a jornada",exact:false});
-  if(await creator.isVisible()) await creator.click();
-  const starter=page.getByRole("button",{name:/Começar com/});
-  if(await starter.isVisible()) await starter.click();
   await page.waitForFunction(()=>{const a=window.ng.getComponent(document.querySelector("ww-app"));return !!a.game().avatar&&a.game().starterChosen===true;});
 }
 async function openSettings() {
@@ -74,7 +73,10 @@ try {
   await settings.getByRole("button",{name:"Ouvir prévia",exact:true}).click();
   await page.waitForFunction(before=>window.__audioStats.starts>before,beforePreview.starts);
   await setVolume("Efeitos",0);
-  await page.waitForFunction(()=>{const a=window.ng.getComponent(document.querySelector("ww-app")).audio;return Math.abs(a.channels.music.gain.value)<.001&&Math.abs(a.channels.ambience.gain.value)<.001&&Math.abs(a.channels.effects.gain.value)<.001;});
+  await page.waitForFunction(()=>{
+    const a=window.ng.getComponent(document.querySelector("ww-app"));
+    return a.prefs().audio.music===0&&a.prefs().audio.ambience===0&&a.prefs().audio.effects===0&&a.audio.timer===null;
+  });
   const muted=await stats();
   await settings.getByRole("button",{name:"Ouvir prévia",exact:true}).click();
   assert.equal((await stats()).starts,muted.starts,"muted effect channel cannot schedule sound");
@@ -97,17 +99,24 @@ try {
   await page.keyboard.press("Escape");await settings.waitFor({state:"hidden"});
   await page.evaluate(async()=>{
     const a=window.ng.getComponent(document.querySelector("ww-app"));
+    const {reduceGame}=await import("/src/app/domain/game.ts");
     window.__playedCues=[];
     const original=a.audio.cue.bind(a.audio);
     a.audio.cue=(...args)=>{window.__playedCues.push(args);return original(...args);};
+    const command={type:"walk",dx:1,dy:0};
     const g={...a.game(),region:"clearing",player:{x:9,y:10},worldLayouts:{...a.game().worldLayouts,clearing:{pots:[],npcs:[]}}};
-    a.session.state=g;a.game.set(g);
-    await a.send({type:"walk",dx:1,dy:0});
+    const after=reduceGame(g,command);
+    if(after===g)throw new Error("Expected a valid exploration step");
+    a.session.state=after;a.game.set(after);a.presentCommand(g,command);
     const accepted=window.__playedCues.length;
-    await a.send({type:"walk",dx:4,dy:0});
+    const rejected={type:"walk",dx:4,dy:0};
+    const unchanged=reduceGame(after,rejected);a.presentCommand(after,rejected);
+    if(unchanged!==after)throw new Error("Invalid test movement unexpectedly changed the game");
     if(window.__playedCues.length!==accepted)throw new Error("Rejected movement played sound");
-    const portal={...a.game(),player:{x:16,y:10}};a.session.state=portal;a.game.set(portal);
-    await a.send({type:"walk",dx:1,dy:0});
+    const portal={...after,player:{x:16,y:10}},portalCommand={type:"walk",dx:1,dy:0};
+    const arrived=reduceGame(portal,portalCommand);
+    if(arrived===portal||arrived.region!=="old-grove")throw new Error("Expected an accepted portal transition");
+    a.session.state=arrived;a.game.set(arrived);a.presentCommand(portal,portalCommand);
   });
   const cues=await page.evaluate(()=>window.__playedCues);
   assert.ok(cues.some(([cue])=>cue==="step"));
