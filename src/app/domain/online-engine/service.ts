@@ -3,6 +3,8 @@ import {
   initialGame,
   createBattle,
   reduceGame,
+  nextRandom,
+  wildEncounterLevel,
   SPECIES,
   species,
   creatureLevel,
@@ -672,6 +674,7 @@ export class GameService {
       const enemy = u.firstCaptureEncounterId
         ? (SPECIES[Math.floor(randomFromSeed(seed) * 5)]?.id ?? "WW002")
         : "WW002";
+      const enemyLevel = wildEncounterLevel(creatureLevel(state.collection[0]!), nextRandom(seed).value);
       state.scene = "battle";
       state.battle = createBattle(
         encounterId,
@@ -681,8 +684,10 @@ export class GameService {
         "wild",
         undefined,
         "classic",
+        undefined,
+        enemyLevel,
       );
-      state.message = `Um ${species(enemy).name} surgiu. Este encontro é salvo na sua conta.`;
+      state.message = `Um ${species(enemy).name} selvagem de nível ${enemyLevel} surgiu. Este encontro é salvo na sua conta.`;
       const e: EncounterDoc = {
         uid,
         creatureId,

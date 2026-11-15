@@ -156,3 +156,8 @@ Nas respostas de trabalho, começar com o papel em uso, por exemplo `### [AGENTE
 - Canvas agora segue o personagem com zoom 1,5, interpola a câmera com o movimento e limita o enquadramento às bordas do mapa. Batalhas continuam sem pan de exploração.
 - Na sessão de jogo, o título introdutório e o rodapé cedem espaço; o header fica sticky; a largura do mapa responde à altura disponível, preserva 4:3 e reduz a descrição secundária do objetivo em telas baixas. O direcional touch fica sobre a área visível do mapa em celulares e tablets, sem depender de rolar até a barra de controles.
 - Build AOT/Vite e `git diff --check` aprovados. Aviso existente do chunk principal acima de 500 kB permanece. Não foram executados testes automatizados de navegador nesta alteração visual. Sem publicação.
+
+## Continuação — níveis dos encontros selvagens
+
+- Encontros selvagens locais e online agora sorteiam nível uniforme inclusivo de 1 até o nível do Eco ativo; o HP do adversário é criado com os atributos daquele nível, e a mensagem de chegada informa o nível. A geração online usa seed do encontro criado pelo backend; a local usa o PRNG persistido do save. Em nível 1 o resultado permanece 1 sem consumir sorteio extra.
+- NPCs, revanches, batalhas já salvas e compatibilidade tática não mudam. A validação/build aceita a alteração; build AOT/Vite e `git diff --check` passaram. Não foram executados testes automatizados nesta alteração. Sem publicação.

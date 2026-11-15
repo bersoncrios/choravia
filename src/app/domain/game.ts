@@ -85,6 +85,11 @@ export const MAX_CREATURE_LEVEL = 30;
 export function creatureLevel(creature: { level?: number }): number {
   return Math.max(1, Math.min(MAX_CREATURE_LEVEL, Math.floor(creature.level ?? 1)));
 }
+export function wildEncounterLevel(maxLevel: number, roll: number): number {
+  const cap = Math.max(1, Math.min(MAX_CREATURE_LEVEL, Math.floor(maxLevel) || 1));
+  const sample = Number.isFinite(roll) ? Math.max(0, Math.min(roll, 1 - Number.EPSILON)) : 0;
+  return Math.floor(sample * cap) + 1;
+}
 export function xpToNextLevel(level: number): number {
   return level >= MAX_CREATURE_LEVEL ? 0 : 30 + 12 * Math.max(1, Math.floor(level));
 }
@@ -605,6 +610,7 @@ export function createBattle(
   challengeId?: Battle["challengeId"],
   mode?: Battle["mode"],
   balance?: BalanceConfig,
+  wildLevel?: number,
 ): Battle {
   const cells: Cell[] = Array.from({ length: 25 }, () => ({
     terrain: "ground",
@@ -622,6 +628,9 @@ export function createBattle(
     { x: 4, y: 3 },
   ])
     cells[cellIndex(p)] = { terrain: "water", remaining: 0 };
+  const enemyLevel = wildLevel === undefined
+    ? creatureLevel(ally)
+    : Math.max(1, Math.min(creatureLevel(ally), Math.floor(wildLevel) || 1));
   const b: Battle = {
     ...(balance ? { balance: structuredClone(balance) } : {}),
     ...(mode ? { mode, allyCooldown: 0, enemyCooldown: 0 } : {}),
@@ -637,8 +646,8 @@ export function createBattle(
     },
     enemy: {
       speciesId: enemy,
-      hp: creatureMaxHp(enemy, creatureLevel(ally), balance),
-      level: creatureLevel(ally),
+      hp: creatureMaxHp(enemy, enemyLevel, balance),
+      level: enemyLevel,
       pos: { x: 3, y: 1 },
       guarding: false,
     },
@@ -1045,6 +1054,7 @@ export function reduceGame(previous: Game, command: Command): Game {
           g.steps = 0;
           g.encountered++;
           const guided = g.captured === 0;
+          const ally = activeCreature(g);
           let enemy: SpeciesId = "WW002";
           if (!guided) {
             const r = nextRandom(g.rng);
@@ -1052,18 +1062,26 @@ export function reduceGame(previous: Game, command: Command): Game {
             const choices = REGION_ENCOUNTERS[g.region ?? "clearing"];
             enemy = choices[Math.floor(r.value * choices.length)] ?? "WW002";
           }
+          const allyLevel = creatureLevel(ally);
+          let enemyLevel = allyLevel;
+          if (allyLevel > 1) {
+            const levelRoll = nextRandom(g.rng);
+            g.rng = levelRoll.seed;
+            enemyLevel = wildEncounterLevel(allyLevel, levelRoll.value);
+          }
           g.battle = createBattle(
             `local-${g.encountered}`,
-            activeCreature(g),
+            ally,
             enemy,
             guided,
             "wild",
             undefined,
             "classic",
             g.balance,
+            enemyLevel,
           );
           g.scene = "battle";
-          g.message = `Um ${species(enemy).name} surgiu. Escolha uma ação. Você começa e o adversário responde em seguida.`;
+          g.message = `Um ${species(enemy).name} selvagem de nível ${enemyLevel} surgiu. Escolha uma ação. Você começa e o adversário responde em seguida.`;
           g.events.push({
             id: `start:${g.battle.id}`,
             type: "encounter_started",
