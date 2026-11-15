@@ -17,7 +17,10 @@ export function reconcileExpedition(game: Game, inventory: ValidatedCreature[], 
   const desired = ids.get(game.activeId) ?? game.activeId;
   const activeMissing = !collection.some(c => c.id === desired);
   if (game.scene === "battle" && activeMissing) throw new Error("O Eco da batalha foi transferido. Sincronize antes de continuar; seu save foi preservado.");
-  return { ...game, journal: mergeJournals(game, {...game, collection}), ...(game.scene === "result" && activeMissing ? { scene: "exploration" as const, battle: null, message: "O Eco foi transferido em outra sessão. Sua expedição foi sincronizada e a batalha encerrada." } : {}), collection, captured: Math.max(game.captured, collection.length - 1), activeId: collection.some(c => c.id === desired) ? desired : (collection.find(c => c.hp > 0) ?? collection[0]!).id };
+  const activeId = collection.some(c => c.id === desired) ? desired : (collection.find(c => c.hp > 0) ?? collection[0]!).id;
+  const teamIds = [...new Set((game.teamIds ?? [game.activeId]).map(id => ids.get(id) ?? id).filter(id => collection.some(c => c.id === id)))].slice(0, 3);
+  if (!teamIds.includes(activeId)) teamIds.unshift(activeId);
+  return { ...game, journal: mergeJournals(game, {...game, collection}), ...(game.scene === "result" && activeMissing ? { scene: "exploration" as const, battle: null, message: "O Eco foi transferido em outra sessão. Sua expedição foi sincronizada e a batalha encerrada." } : {}), collection, captured: Math.max(game.captured, collection.length - 1), activeId, teamIds: teamIds.slice(0, 3) };
 }
 export function dailyActionTypes(before: Game, after: Game, command: Command): DailyContractType[] {
   if (before === after) return [];

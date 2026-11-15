@@ -450,7 +450,7 @@ service cloud.firestore {
       allow create, update: if admin() && id.matches('^custom-[a-z0-9-]{3,54}$')
         && request.resource.data.keys().hasOnly(['id','name','description','shape','color','price','active','revision','updatedBy','updatedAt','auditId'])
         && request.resource.data.id == id && contentText(request.resource.data) && contentMeta(request.resource.data)
-        && request.resource.data.shape in ['pin','scarf','crown'] && request.resource.data.price is int
+        && request.resource.data.shape in ['pin','scarf','crown','flower','halo','feather','leaf','headband','antlers','moth','star','bell','medallion','ribbon','satchel','cape','wristband','mask','horn','shell'] && request.resource.data.price is int
         && request.resource.data.price >= 0 && request.resource.data.price <= 10000
         && contentProof('shop_accessories/' + id, request.resource.data.auditId, 'saveAccessory')
         && (resource == null ? request.resource.data.revision == 1 && addedContent('shop_accessories', request.resource.data.auditId) : request.resource.data.revision == resource.data.revision + 1);
@@ -473,7 +473,7 @@ service cloud.firestore {
       allow create, update: if admin() && id.matches('^badge-[a-z0-9-]{3,54}$')
         && request.resource.data.keys().hasOnly(['id','name','description','symbol','color','category','active','revision','updatedBy','updatedAt','auditId'])
         && request.resource.data.id == id && contentText(request.resource.data) && contentMeta(request.resource.data)
-        && request.resource.data.symbol in ['star','leaf','flame','gem','crown'] && request.resource.data.category in ['event','milestone','special']
+        && request.resource.data.symbol in ['star','leaf','flame','gem','crown','moon','sun','wave','tree','sprout','heart','feather','spiral','compass','drop','flower','lightning','paw','ring','music'] && request.resource.data.category in ['event','milestone','special']
         && contentProof('badge_definitions/' + id, request.resource.data.auditId, 'saveBadge')
         && (resource == null ? request.resource.data.revision == 1 && addedContent('badge_definitions', request.resource.data.auditId) : request.resource.data.revision == resource.data.revision + 1);
       allow delete: if false;

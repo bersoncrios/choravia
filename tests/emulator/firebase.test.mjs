@@ -479,7 +479,7 @@ test("live operations enforce roles, atomic audits, revisions and private idempo
   await dbAdmin.doc(`users/${actor.uid}`).set({ role: "admin" }, { merge: true });
   const ops = new FirestoreLiveOps(actor.db, () => actor.uid);
   const ordinary = new FirestoreLiveOps(player.db, () => player.uid);
-  const accessory = { id: `custom-${randomUUID()}`, name: "Coroa do evento", description: "Peça criada para o evento de teste.", shape: "crown", color: "#aaccee", price: 75, active: true, revision: 0 };
+  const accessory = { id: `custom-${randomUUID()}`, name: "Galhos do evento", description: "Peça criada para o evento de teste.", shape: "antlers", color: "#aaccee", price: 75, active: true, revision: 0 };
   const req = { method: "saveAccessory", requestId: randomUUID(), value: accessory, reason: "Evento de integração" };
   await assert.rejects(ordinary.execute(req), denied);
   assert.equal((await ops.execute(req)).replay, false);
@@ -496,7 +496,7 @@ test("live operations enforce roles, atomic audits, revisions and private idempo
   balance.revision = existingBalance.exists() ? existingBalance.get("revision") : 0;
   await ops.execute({ method: "saveBalance", requestId: randomUUID(), value: balance, reason: "Ajuste de integração" });
   assert.equal((await getDoc(doc(player.db, "eco_balance", "WW001"))).get("hp"), 80);
-  const badge = { id: `badge-${randomUUID()}`, name: "Evento inaugural", description: "Participante do evento de integração.", color: "#ddaa55", symbol: "star", category: "event", active: true, revision: 0 };
+  const badge = { id: `badge-${randomUUID()}`, name: "Evento inaugural", description: "Participante do evento de integração.", color: "#ddaa55", symbol: "moon", category: "event", active: true, revision: 0 };
   await ops.execute({ method: "saveBadge", requestId: randomUUID(), value: badge, reason: "Reconhecimento de evento" });
   const grant = { method: "grantBadge", requestId: randomUUID(), targetUid: player.uid, badgeId: badge.id, reason: "Participação confirmada no evento" };
   await ops.execute(grant); assert.equal((await ops.execute(grant)).replay, true);

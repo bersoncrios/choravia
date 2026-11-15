@@ -4,6 +4,7 @@ const integer = (x: unknown, min: number, max: number) => Number.isInteger(x) &&
 export function validTurnData(b: Record<string, unknown>): boolean {
   if (b["mode"] !== undefined && b["mode"] !== "classic") return false;
   for (const key of ["allyCooldown", "enemyCooldown"]) if (b[key] !== undefined && !integer(b[key], 0, 1)) return false;
+  for (const key of ["awaitingReplacement", "replacementEnemyTurn"]) if (b[key] !== undefined && typeof b[key] !== "boolean") return false;
   const frames = b["turnFrames"];
   if (frames === undefined) return true;
   if (b["mode"] !== "classic" || !Array.isArray(frames) || frames.length < 1 || frames.length > 2) return false;

@@ -10,7 +10,7 @@ import { SyncModalComponent, type SyncModalState } from "./sync-modal/sync-modal
 import { SaveToastComponent } from "./save-toast/save-toast.js";
 import { LiveOpsPanelComponent } from "./live-ops-panel.js";
 import { applyLiveContent } from "../application/live-content.js";
-import { BADGE_SYMBOLS, isCustomAccessoryId, type LiveContent, type PlayerBadge, type LiveOpsRequest, type CustomAccessoryId } from "../domain/live-ops.js";
+import { ACCESSORY_MODELS, BADGE_SYMBOLS, isCustomAccessoryId, type LiveContent, type PlayerBadge, type LiveOpsRequest, type CustomAccessoryId } from "../domain/live-ops.js";
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -47,6 +47,7 @@ import {
   creatureStats,
   creatureMaxHp,
   xpToNextLevel,
+  teamOf,
 } from "../domain/game.js";
 import { DailyActionQueue, dailyActionTypes, dailyCycle, reconcileExpedition, mergePreviousEncounter } from "../application/account-expedition.js";
 import { frameGame, skillReady, type BattlePhase } from "../application/battle-playback.js";
@@ -164,7 +165,7 @@ interface Preferences {
               <span class="avatar-doll-face"><i></i></span>
               <span class="avatar-doll-body"></span>
               <span class="avatar-doll-accessory"></span>
-              @if (avatarDraft().customAccessory; as custom) { <span class="custom-avatar-accessory" [attr.data-shape]="custom.shape" [style.color]="custom.color">{{ custom.shape === 'crown' ? '♛' : custom.shape === 'scarf' ? '≈' : '◆' }}</span> }
+              @if (avatarDraft().customAccessory; as custom) { <span class="custom-avatar-accessory" [attr.data-shape]="custom.shape" [style.color]="custom.color">{{ accessoryModels[custom.shape].glyph }}</span> }
             </div>
             <span>Seu Guardião</span>
           </div>
@@ -337,10 +338,20 @@ interface Preferences {
               <div class="training-objective" role="status"><strong>REVANCHE DE TREINO · {{ training.goal === 'skill' ? 'Vença usando uma habilidade' : 'Vença após defender ao menos uma vez' }}</strong><p>{{ (training.goal === 'skill' ? training.usedSkill : training.usedGuard) ? '✓ Ação do objetivo realizada; conclua com vitória.' : 'Experimente a estratégia indicada nesta luta.' }} Sem Sementes, XP, captura ou progresso das Trilhas.</p></div>
             }
             <div class="turn-banner" role="status" aria-live="polite" [attr.data-phase]="turnPhase()">
-              <div><strong>{{ battleView().scene === 'result' ? 'Batalha encerrada' : busy() && turnPhase() === 'choice' ? 'Confirmando sua ação…' : turnPhase() === 'choice' ? 'Sua vez — escolha uma ação' : turnPhase() === 'player' ? 'Resolvendo sua ação' : 'Vez do adversário' }}</strong>
-              <p>{{ battleView().scene === 'result' ? battleView().message : turnPhase() === 'choice' ? (classicBattle() ? 'Uma ação por rodada. Depois, o adversário responde.' : 'Combate tático salvo: mova e escolha uma ação.') : battleView().message }}</p></div>
+              <div><strong>{{ b.awaitingReplacement ? 'Escolha o próximo Eco' : battleView().scene === 'result' ? 'Batalha encerrada' : busy() && turnPhase() === 'choice' ? 'Confirmando sua ação…' : turnPhase() === 'choice' ? 'Sua vez — escolha uma ação' : turnPhase() === 'player' ? 'Resolvendo sua ação' : 'Vez do adversário' }}</strong>
+              <p>{{ b.awaitingReplacement ? 'O adversário já agiu. Continue a luta com outro membro do seu time.' : battleView().scene === 'result' ? battleView().message : turnPhase() === 'choice' ? (classicBattle() ? 'Uma ação por rodada. Depois, o adversário responde.' : 'Combate tático salvo: mova e escolha uma ação.') : battleView().message }}</p></div>
               @if (turnPhase() !== 'choice') { <button (click)="finishPlayback()">Acelerar</button> }
             </div>
+            @if (b.awaitingReplacement) {
+              <div class="battle-replacements" aria-label="Ecos disponíveis para continuar a batalha">
+                <p>{{ species(b.ally.speciesId).name }} desmaiou. Selecione um Eco do seu time.</p>
+                @for (id of teamOf(game()); track id) {
+                  @if (id !== game().activeId) { @for (c of game().collection; track c.id) {
+                    @if (c.id === id && c.hp > 0) { <button (click)="send({type:'switchBattleEco', id:c.id})" [disabled]="busy() || turnPhase() !== 'choice'">{{ species(c.speciesId).name }} · Nv. {{ creatureLevel(c) }} · {{ c.hp }} PV</button> }
+                  } }
+                }
+              </div>
+            }
             <div class="battle-hud">
               <div>
                 <span class="tiny-label">SEU ECO</span
@@ -368,7 +379,7 @@ interface Preferences {
               >Seu navegador precisa oferecer Canvas 2D para renderizar a
               floresta.</canvas
             >
-            @if (battleView().scene === "battle" && !classicBattle()) {
+            @if (battleView().scene === "battle" && !classicBattle() && !battleView().battle?.awaitingReplacement) {
               <div
                 class="arena-grid"
                 role="grid"
@@ -477,7 +488,7 @@ interface Preferences {
               busy() ? "SINCRONIZANDO…" : "◇"
             }}</small>
           </div>
-          @if (battleView().scene === "battle") {
+          @if (battleView().scene === "battle" && !battleView().battle?.awaitingReplacement) {
             <div class="action-bar" aria-label="Ações de batalha">
               @if (!classicBattle()) { <button
                 [class.selected]="selection() === 'move'"
@@ -804,16 +815,16 @@ interface Preferences {
                   }}</small>
                 </div>
                 <button
-                  (click)="send({ type: 'activate', id: c.id })"
+                  (click)="toggleTeamMember(c.id)"
                   [disabled]="
-                    c.id === game().activeId ||
                     c.hp === 0 ||
                     battleView().scene !== 'exploration' ||
+                    onlineMode() ||
                     busy() ||
                     creatureLocked(c.id)
                   "
                 >
-                  {{ c.id === game().activeId ? "Ao seu lado" : "Escolher" }}
+                  {{ teamOf(game()).includes(c.id) ? (c.id === game().activeId ? "Líder do time" : "No time · remover") : "Adicionar ao time" }}
                 </button>
               </article>
             }
@@ -1059,6 +1070,15 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private playbackTimers: ReturnType<typeof setTimeout>[] = [];
   readonly skillNames = SKILL_NAMES;
   battleView(): Game { return this.playbackView() ?? this.game(); }
+  readonly teamOf = teamOf;
+  toggleTeamMember(id: string): void {
+    if (this.game().scene !== "exploration" || this.busy()) return;
+    const current = teamOf(this.game());
+    const next = current.includes(id) ? current.filter(member => member !== id) : [...current, id];
+    if (!next.length) return;
+    if (next.length > 3) { this.expeditionError.set("Seu time pode ter até 3 Ecos."); return; }
+    void this.send({ type: "setTeam", ids: next });
+  }
   classicBattle(): boolean { return this.battleView().battle?.mode === "classic"; }
   skillAvailable(): boolean { return !!this.game().battle && skillReady(this.game().battle!); }
   chooseBattleAction(type: "basic" | "skill"): void {
@@ -1140,6 +1160,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (item) this.avatarDraft.update(v => ({ ...v, accessory: "none", customAccessory: { id: item.id, shape: item.shape, color: item.color } }));
   }
   readonly starterDraft = signal<SpeciesId>("WW001");
+  readonly accessoryModels = ACCESSORY_MODELS;
   readonly skinChoices = [
     { id: "sand" as const, label: "Areia" },
     { id: "copper" as const, label: "Cobre" },

@@ -18,66 +18,6 @@ import {
 } from "../domain/game.js";
 import { visualFeedback, type VisualFeedback } from "../application/visual-feedback.js";
 import { DEFAULT_AVATAR, type AvatarAppearance } from "../domain/avatar.js";
-const PIXELS: Record<SpeciesId, readonly string[]> = {
-  WW001: [
-    "..o...o..",
-    "..oo.oo..",
-    "..ooooo..",
-    ".oowowoo.",
-    ".oo.o.oo.",
-    "..ooooo..",
-    "...ooo.oo",
-    "..oooooo.",
-    "..o..o...",
-  ],
-  WW002: [
-    "....o....",
-    "...ooo...",
-    "..ooooo..",
-    ".oowowoo.",
-    "ooo.o.ooo",
-    "ooooooooo",
-    ".ooooooo.",
-    "..o...o..",
-    ".........",
-  ],
-  WW003: [
-    "..oo.oo..",
-    ".ooooooo.",
-    ".oowowoo.",
-    ".ooo.ooo.",
-    "..ooooo..",
-    "..oooooo.",
-    ".oooooooo",
-    "..oo.oo..",
-    ".........",
-  ],
-  WW004: [
-    ".oo...oo.",
-    "..oo.oo..",
-    "..ooooo..",
-    ".oowowoo.",
-    ".oo.o.oo.",
-    "..ooooo.o",
-    "..ooooo.o",
-    ".oo..ooo.",
-    ".........",
-  ],
-  WW005: [
-    "...ooo...",
-    "..ooooo..",
-    ".ooooooo.",
-    "ooo.o.ooo",
-    "ooooooooo",
-    ".oowowoo.",
-    "..ooooo..",
-    ".oo...oo.",
-    ".........",
-  ],
-  WW006: [
-    "..o...o..", "...o.o...", ".o.oooo.o", "..ooooo..", "oowowwoo.", "..ooooo..", "...ooo...", "..o...o..", ".........",
-  ],
-};
 export function drawCreature(
   ctx: CanvasRenderingContext2D,
   id: SpeciesId,
@@ -85,41 +25,96 @@ export function drawCreature(
   cy: number,
   scale = 3,
 ): void {
-  const shape = PIXELS[id];
   const s = species(id);
   ctx.fillStyle = "#081b2270";
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    cy + (13 * scale) / 3,
-    (12 * scale) / 3,
-    (4 * scale) / 3,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx, cy + scale * 2.8, scale * 3.2, scale * 0.78, 0, 0, Math.PI * 2);
   ctx.fill();
-  for (let y = 0; y < shape.length; y++)
-    for (let x = 0; x < (shape[y]?.length ?? 0); x++) {
-      const p = shape[y]?.[x];
-      if (p === ".") continue;
-      ctx.fillStyle = p === "w" ? "#f4f1de" : s.color;
-      ctx.fillRect(
-        Math.round(cx + (x - 4.5) * scale),
-        Math.round(cy + (y - 5) * scale),
-        scale,
-        scale,
-      );
-      if (p === "w") {
-        ctx.fillStyle = "#14272b";
-        ctx.fillRect(
-          Math.round(cx + (x - 4.5) * scale),
-          Math.round(cy + (y - 5) * scale),
-          Math.max(1, scale / 2),
-          Math.max(1, scale / 2),
-        );
-      }
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  const u = scale, outline = "#263c3d", dark = "#31504b";
+  const gradient = ctx.createLinearGradient(-4 * u, -4 * u, 4 * u, 4 * u);
+  gradient.addColorStop(0, s.color);
+  gradient.addColorStop(0.58, s.color);
+  gradient.addColorStop(1, dark);
+  const eye = (x: number, y: number, r = 0.48): void => {
+    ctx.fillStyle = "#fff4dd"; ctx.beginPath(); ctx.ellipse(x * u, y * u, r * u, r * u * 1.13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1d3335"; ctx.beginPath(); ctx.ellipse((x + 0.11) * u, (y + 0.05) * u, r * 0.55 * u, r * 0.78 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc((x - 0.03) * u, (y - 0.12) * u, r * 0.16 * u, 0, Math.PI * 2); ctx.fill();
+  };
+  const stroke = (width = 0.22): void => { ctx.strokeStyle = outline; ctx.lineWidth = width * u; ctx.stroke(); };
+  const petal = (x: number, y: number, rotation: number): void => {
+    ctx.save(); ctx.translate(x * u, y * u); ctx.rotate(rotation); ctx.fillStyle = "#ffd891";
+    ctx.beginPath(); ctx.ellipse(0, -0.43 * u, 0.27 * u, 0.48 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  };
+  // Each species has its own silhouette; gradients, soft outlines and small
+  // highlights preserve the storybook look at both map and battle scale.
+  if (id === "WW001") {
+    ctx.fillStyle = "#d66d4f";
+    for (const side of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(side * 1.35 * u, -2.2 * u); ctx.bezierCurveTo(side * 2.55 * u, -3.7 * u, side * 2.25 * u, -5.1 * u, side * 3.15 * u, -5.35 * u); ctx.bezierCurveTo(side * 3.25 * u, -4.15 * u, side * 2.75 * u, -3.25 * u, side * 2.1 * u, -2.1 * u); ctx.closePath(); ctx.fill(); stroke();
     }
+    ctx.fillStyle = gradient; ctx.beginPath(); ctx.moveTo(-3.15 * u, 1.5 * u); ctx.bezierCurveTo(-3.65 * u, -1.5 * u, -2.65 * u, -3.25 * u, 0, -3.35 * u); ctx.bezierCurveTo(2.75 * u, -3.3 * u, 3.65 * u, -1.25 * u, 3.05 * u, 1.65 * u); ctx.bezierCurveTo(2.45 * u, 3.55 * u, -2.4 * u, 3.55 * u, -3.15 * u, 1.5 * u); ctx.fill(); stroke();
+    ctx.fillStyle = "#ffe1a9"; ctx.beginPath(); ctx.ellipse(0, 1.05 * u, 1.78 * u, 1.42 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#f7bd72"; ctx.beginPath(); ctx.ellipse(0, -3.05 * u, 0.85 * u, 0.48 * u, 0, 0, Math.PI * 2); ctx.fill();
+    eye(-1.18, -0.72); eye(1.18, -0.72);
+    ctx.strokeStyle = "#9c4f43"; ctx.lineWidth = 0.18 * u; ctx.beginPath(); ctx.arc(0, 0.58 * u, 0.48 * u, 0.18, Math.PI - 0.18); ctx.stroke();
+  } else if (id === "WW002") {
+    ctx.fillStyle = "#6b8d59";
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.ellipse(side * 3.25 * u, 0.45 * u, 0.7 * u, 0.35 * u, side * 0.25, 0, Math.PI * 2); ctx.fill(); stroke(); }
+    ctx.fillStyle = gradient; ctx.beginPath(); ctx.ellipse(0, 0.25 * u, 3.4 * u, 2.75 * u, 0, 0, Math.PI * 2); ctx.fill(); stroke();
+    ctx.fillStyle = "#587b50"; ctx.beginPath(); ctx.ellipse(0, 0.45 * u, 2.55 * u, 1.82 * u, 0, Math.PI, Math.PI * 2); ctx.fill(); stroke(0.16);
+    ctx.strokeStyle = "#9fc981"; ctx.lineWidth = 0.16 * u; ctx.beginPath(); ctx.moveTo(-1.7 * u, 0.15 * u); ctx.quadraticCurveTo(0, -1.28 * u, 1.7 * u, 0.15 * u); ctx.moveTo(-1.45 * u, 0.8 * u); ctx.quadraticCurveTo(0, -0.34 * u, 1.45 * u, 0.8 * u); ctx.stroke();
+    ctx.fillStyle = "#d1e7a4"; ctx.beginPath(); ctx.ellipse(0, 1.48 * u, 1.55 * u, 1.04 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#648b54"; ctx.beginPath(); ctx.moveTo(-0.45 * u, -2.3 * u); ctx.quadraticCurveTo(-1.9 * u, -4.9 * u, -0.1 * u, -3.6 * u); ctx.quadraticCurveTo(1.25 * u, -5.2 * u, 0.58 * u, -2.28 * u); ctx.fill(); stroke(0.15);
+    eye(-1.15, -0.62, 0.42); eye(1.15, -0.62, 0.42);
+  } else if (id === "WW003") {
+    ctx.fillStyle = "#4c9db2";
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(side * 2.55 * u, -0.7 * u); ctx.quadraticCurveTo(side * 4.35 * u, -2.45 * u, side * 4.1 * u, 0.2 * u); ctx.quadraticCurveTo(side * 3.7 * u, 1.05 * u, side * 2.6 * u, 0.75 * u); ctx.fill(); stroke(); }
+    ctx.fillStyle = gradient; ctx.beginPath(); ctx.moveTo(-3.2 * u, 0.5 * u); ctx.bezierCurveTo(-3.55 * u, -2.15 * u, -1.8 * u, -3.25 * u, 0, -3.15 * u); ctx.bezierCurveTo(1.9 * u, -3.25 * u, 3.5 * u, -1.65 * u, 3.18 * u, 0.55 * u); ctx.bezierCurveTo(2.85 * u, 2.9 * u, -2.7 * u, 3.25 * u, -3.2 * u, 0.5 * u); ctx.fill(); stroke();
+    ctx.fillStyle = "#bfeaf0"; ctx.beginPath(); ctx.ellipse(0, 1.3 * u, 1.8 * u, 1.35 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#8cd5df"; ctx.beginPath(); ctx.ellipse(-1.2 * u, -2.35 * u, 0.55 * u, 0.86 * u, -0.42, 0, Math.PI * 2); ctx.fill();
+    eye(-1.05, -0.76); eye(1.05, -0.76);
+    ctx.strokeStyle = "#467985"; ctx.lineWidth = 0.18 * u; ctx.beginPath(); ctx.arc(0, 0.62 * u, 0.42 * u, 0.15, Math.PI - 0.15); ctx.stroke();
+  } else if (id === "WW004") {
+    ctx.fillStyle = "#bba84e";
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(side * 1.65 * u, -1.8 * u); ctx.quadraticCurveTo(side * 2.1 * u, -4.55 * u, side * 3.25 * u, -4.35 * u); ctx.quadraticCurveTo(side * 2.95 * u, -2.45 * u, side * 2.15 * u, -1.35 * u); ctx.fill(); stroke(); }
+    ctx.fillStyle = gradient; ctx.beginPath(); ctx.ellipse(0, 0.2 * u, 2.85 * u, 2.55 * u, -0.08, 0, Math.PI * 2); ctx.fill(); stroke();
+    ctx.fillStyle = "#e9d57a"; ctx.beginPath(); ctx.ellipse(0, 1.25 * u, 1.55 * u, 1.25 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#d3bd58"; ctx.beginPath(); ctx.moveTo(2.25 * u, 1.2 * u); ctx.bezierCurveTo(4.45 * u, 0.18 * u, 3.2 * u, 2.9 * u, 4.45 * u, 3.35 * u); ctx.bezierCurveTo(2.75 * u, 3.7 * u, 2.2 * u, 2.8 * u, 2.25 * u, 1.2 * u); ctx.fill(); stroke();
+    eye(-1.05, -0.62, 0.42); eye(1.05, -0.62, 0.42);
+    ctx.fillStyle = "#fff0a5"; ctx.beginPath(); ctx.arc(0, 1.0 * u, 0.24 * u, 0, Math.PI * 2); ctx.fill();
+  } else if (id === "WW005") {
+    ctx.fillStyle = "#8c725b";
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.ellipse(side * 1.8 * u, 2.25 * u, 0.75 * u, 1.2 * u, side * 0.12, 0, Math.PI * 2); ctx.fill(); stroke(); }
+    ctx.fillStyle = gradient; ctx.beginPath(); ctx.moveTo(-3.25 * u, 1.0 * u); ctx.lineTo(-3.0 * u, -1.35 * u); ctx.quadraticCurveTo(-2.75 * u, -3.15 * u, -1.65 * u, -2.85 * u); ctx.lineTo(-0.7 * u, -3.75 * u); ctx.lineTo(0.5 * u, -3.15 * u); ctx.lineTo(1.55 * u, -3.55 * u); ctx.lineTo(2.55 * u, -2.15 * u); ctx.lineTo(3.1 * u, 0.85 * u); ctx.quadraticCurveTo(2.4 * u, 2.4 * u, 0, 2.45 * u); ctx.quadraticCurveTo(-2.7 * u, 2.65 * u, -3.25 * u, 1.0 * u); ctx.fill(); stroke();
+    ctx.fillStyle = "#ddc6a0"; ctx.beginPath(); ctx.ellipse(0, 1.45 * u, 1.42 * u, 0.85 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#d5b18a"; ctx.beginPath(); ctx.moveTo(-1.0 * u, -2.65 * u); ctx.lineTo(-0.55 * u, -3.52 * u); ctx.lineTo(0.1 * u, -2.62 * u); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#d5b18a"; ctx.beginPath(); ctx.moveTo(1.05 * u, -2.65 * u); ctx.lineTo(1.7 * u, -3.42 * u); ctx.lineTo(1.85 * u, -2.35 * u); ctx.closePath(); ctx.fill();
+    eye(-1.05, -0.62, 0.4); eye(1.05, -0.62, 0.4);
+  } else {
+    // Lumisco: rounded beetle shell, translucent wings, antennae and six legs.
+    ctx.strokeStyle = "#8c9b4d"; ctx.lineWidth = 0.22 * u;
+    for (const side of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(side * 1.65 * u, 0.55 * u); ctx.quadraticCurveTo(side * 2.55 * u, 0.9 * u, side * 3.05 * u, 1.9 * u); ctx.moveTo(side * 1.65 * u, 1.1 * u); ctx.quadraticCurveTo(side * 2.6 * u, 1.5 * u, side * 2.8 * u, 2.35 * u); ctx.moveTo(side * 1.3 * u, 1.45 * u); ctx.quadraticCurveTo(side * 2.0 * u, 2.1 * u, side * 2.1 * u, 2.75 * u); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(side * 0.75 * u, -2.25 * u); ctx.quadraticCurveTo(side * 1.35 * u, -4.45 * u, side * 2.05 * u, -3.55 * u); ctx.stroke();
+    }
+    ctx.fillStyle = "#f6efab55"; ctx.beginPath(); ctx.ellipse(-2.0 * u, -0.95 * u, 1.15 * u, 2.15 * u, -0.55, 0, Math.PI * 2); ctx.fill(); stroke(0.12);
+    ctx.beginPath(); ctx.ellipse(2.0 * u, -0.95 * u, 1.15 * u, 2.15 * u, 0.55, 0, Math.PI * 2); ctx.fill(); stroke(0.12);
+    ctx.fillStyle = gradient; ctx.beginPath(); ctx.ellipse(0, 0.35 * u, 2.65 * u, 2.75 * u, 0, 0, Math.PI * 2); ctx.fill(); stroke();
+    ctx.fillStyle = "#f7edaa"; ctx.beginPath(); ctx.ellipse(0, 0.35 * u, 1.62 * u, 2.28 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#b4b75f"; ctx.lineWidth = 0.15 * u; ctx.beginPath(); ctx.moveTo(0, -1.85 * u); ctx.lineTo(0, 2.25 * u); ctx.stroke();
+    eye(-0.92, -0.72, 0.36); eye(0.92, -0.72, 0.36);
+    ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = "#fffbd1"; ctx.beginPath(); ctx.arc(-1.0 * u, -1.35 * u, 0.7 * u, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  // Soft specular marks add volume without relying on texture or external art.
+  ctx.fillStyle = "#ffffff55"; ctx.beginPath(); ctx.ellipse(-1.8 * u, -1.95 * u, 0.7 * u, 0.28 * u, -0.55, 0, Math.PI * 2); ctx.fill();
+  if (id === "WW001") { ctx.fillStyle = "#ffd986"; petal(-2.5, -2.5, -0.6); petal(2.5, -2.5, 0.6); }
+  if (id === "WW002") { ctx.fillStyle = "#e7a8a3"; petal(-3.15, 0.15, -0.9); petal(3.15, 0.15, 0.9); }
+  if (id === "WW005") { ctx.fillStyle = "#ead5b0"; ctx.beginPath(); ctx.arc(-2.25 * u, -1.35 * u, 0.22 * u, 0, Math.PI * 2); ctx.arc(2.25 * u, -1.35 * u, 0.22 * u, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
 }
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -824,8 +819,23 @@ export class Renderer {
     }
     if (avatar.customAccessory) {
       c.fillStyle = avatar.customAccessory.color;
-      if (avatar.customAccessory.shape === "scarf") { c.fillRect(x - 6, y - 1 + bob, 12, 3); c.fillRect(x + 3 + flutter, y + 1 + bob, 3, 5); }
-      else if (avatar.customAccessory.shape === "crown") { c.fillRect(x - 6, y - 15 + bob, 12, 3); c.fillRect(x - 6, y - 18 + bob, 2, 4); c.fillRect(x - 1, y - 19 + bob, 2, 4); c.fillRect(x + 4, y - 18 + bob, 2, 4); }
+      const shape = avatar.customAccessory.shape, top = y - 15 + bob;
+      if (shape === "scarf") { c.fillRect(x - 6, y - 1 + bob, 12, 3); c.fillRect(x + 3 + flutter, y + 1 + bob, 3, 5); }
+      else if (shape === "crown") { c.fillRect(x - 6, top, 12, 3); c.fillRect(x - 6, top - 3, 2, 4); c.fillRect(x - 1, top - 4, 2, 5); c.fillRect(x + 4, top - 3, 2, 4); }
+      else if (shape === "halo") { c.strokeStyle = avatar.customAccessory.color; c.lineWidth = 2; c.beginPath(); c.ellipse(x, top - 4, 7, 2, 0, 0, Math.PI * 2); c.stroke(); }
+      else if (shape === "headband") { c.fillRect(x - 7, top + 4, 14, 2); c.fillRect(x - 8, top + 3, 2, 3); c.fillRect(x + 6, top + 3, 2, 3); }
+      else if (shape === "antlers") { c.fillRect(x - 7, top + 1, 2, 8); c.fillRect(x - 10, top, 2, 4); c.fillRect(x - 9, top, 5, 2); c.fillRect(x + 5, top + 1, 2, 8); c.fillRect(x + 8, top, 2, 4); c.fillRect(x + 5, top, 5, 2); }
+      else if (shape === "feather") { c.fillRect(x + 1, top - 5, 2, 12); c.fillRect(x + 3, top - 4, 4, 3); c.fillRect(x + 3, top, 5, 2); c.fillRect(x + 3, top + 4, 4, 2); }
+      else if (shape === "flower") { c.fillRect(x - 7, top + 4, 3, 3); c.fillRect(x - 4, top + 1, 3, 3); c.fillRect(x - 1, top + 4, 3, 3); c.fillRect(x - 4, top + 7, 3, 3); c.fillRect(x - 4, top + 4, 3, 3); }
+      else if (shape === "moth") { c.fillRect(x - 8, top + 3, 5, 4); c.fillRect(x - 5, top + 1, 3, 6); c.fillRect(x + 3, top + 3, 5, 4); c.fillRect(x + 2, top + 1, 3, 6); c.fillRect(x - 1, top + 3, 2, 6); }
+      else if (shape === "star" || shape === "horn") { c.fillRect(x - 2, top - 1, 4, 9); c.fillRect(x - 5, top + 2, 10, 3); if (shape === "horn") { c.fillRect(x + 4, top - 4, 2, 8); c.fillRect(x + 6, top - 6, 2, 5); } }
+      else if (shape === "mask") { c.fillRect(x - 7, y - 9 + bob, 14, 6); c.fillStyle = "#142d30"; c.fillRect(x - 4, y - 8 + bob, 2, 2); c.fillRect(x + 2, y - 8 + bob, 2, 2); }
+      else if (shape === "ribbon") { c.fillRect(x - 6, y - 1 + bob, 12, 3); c.fillRect(x + 3 + flutter, y + 1 + bob, 3, 5); c.fillRect(x - 8, y - 2 + bob, 3, 3); c.fillRect(x + 5, y - 2 + bob, 3, 3); }
+      else if (shape === "cape") { c.fillRect(x - 8, y - 4 + bob, 3, 12); c.fillRect(x + 5, y - 4 + bob, 3, 12); c.fillRect(x - 6, y + 5 + bob, 12, 3); }
+      else if (shape === "satchel") { c.fillRect(x + 5, y - 1 + bob, 4, 8); c.fillRect(x + 4, y + 1 + bob, 6, 5); c.fillRect(x + 6, y + 2 + bob, 2, 2); }
+      else if (shape === "wristband") { c.fillRect(x - 8, y + 2 + bob, 3, 3); c.fillRect(x + 5, y + 2 + bob, 3, 3); }
+      else if (["medallion", "shell", "bell"].includes(shape)) { c.fillRect(x + 4, y - 6 + bob, 4, 4); c.fillRect(x + 5, y - 5 + bob, 2, 2); if (shape === "shell") c.fillRect(x + 4, y + 1 + bob, 4, 2); if (shape === "bell") c.fillRect(x + 5, y + 1 + bob, 2, 2); }
+      else if (shape === "leaf") { c.fillRect(x + 3, y - 6 + bob, 3, 7); c.fillRect(x + 1, y - 4 + bob, 3, 3); c.fillRect(x + 5, y - 3 + bob, 3, 3); }
       else { c.fillRect(x + 3, y - 4 + bob, 4, 4); }
     }
     if (facing !== "up") {

@@ -46,7 +46,9 @@ try {
  await editor.getByLabel("Nome do acessório", { exact: true }).fill("Coroa de evento");
  await editor.getByLabel("Descrição do acessório", { exact: true }).fill("Um presente para celebrar a floresta.");
  await editor.getByLabel("Preço em Sementes", { exact: true }).fill("25");
- await editor.getByLabel("Modelo visual", { exact: true }).selectOption("crown");
+ await editor.getByLabel("Modelo visual", { exact: true }).selectOption("antlers");
+ assert.equal(await editor.locator(".accessory-sample small").innerText(), "Galhos jovens");
+ assert.equal(await editor.getByLabel("Modelo visual", { exact: true }).locator("option").count(), 20);
  await editor.getByRole("button", { name: "Salvar acessório", exact: true }).click();
  await page.waitForFunction(() => window.ng.getComponent(document.querySelector("ww-app")).game().shopCatalog?.length === 1);
  await editor.locator("summary").filter({ hasText: "Balanceamento dos Ecos" }).click();
@@ -57,6 +59,9 @@ try {
  await editor.locator("summary").filter({ hasText: "Badges de eventos e marcos" }).click();
  await editor.getByLabel("Nome da badge", { exact: true }).fill("Pioneiro da floresta");
  await editor.getByLabel("Descrição da badge", { exact: true }).fill("Participou do primeiro festival da floresta.");
+ assert.equal(await editor.getByLabel("Símbolo", { exact: true }).locator("option").count(), 20);
+ await editor.getByLabel("Símbolo", { exact: true }).selectOption("music");
+ assert.match(await editor.locator(".badge-symbol-preview").innerText(), /♫\s*Melodia/);
  await editor.getByRole("button", { name: "Salvar badge", exact: true }).click();
  await editor.getByRole("status").filter({ hasText: "Operação confirmada" }).waitFor();
  await editor.getByLabel("UID para conceder badge", { exact: true }).fill("live-gm-test");
@@ -75,10 +80,10 @@ try {
  await item.getByRole("button", { name: "25 ✦", exact: true }).click();
  await item.getByRole("button", { name: "Equipado: Coroa de evento", exact: true }).waitFor();
  const custom = await page.evaluate(() => window.ng.getComponent(document.querySelector("ww-app")).game().avatar.customAccessory);
- assert.equal(custom.shape, "crown");
+ assert.equal(custom.shape, "antlers");
  await item.getByRole("button", { name: "Equipado: Coroa de evento", exact: true }).click();
  const wardrobe = page.getByRole("dialog", { name: "Mudar aparência", exact: true });
- await wardrobe.locator(".custom-avatar-accessory[data-shape=crown]").waitFor();
+ await wardrobe.locator(".custom-avatar-accessory[data-shape=antlers]").waitFor();
  await wardrobe.getByRole("button", { name: "Cancelar", exact: true }).click();
  await page.keyboard.press("Escape");
  await page.getByRole("button", { name: "Abrir menu da expedição", exact: true }).click();

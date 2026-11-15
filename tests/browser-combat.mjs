@@ -59,7 +59,7 @@ try {
   await page.getByRole("button", { name: "Acelerar", exact: true }).click();
   await phase("choice");
   assert.equal(await page.getByRole("button", { name: /Faísca/ }).isDisabled(), false);
-  for (const [id, label] of [["WW002","Chicote de folha"], ["WW003","Jato d’água"], ["WW004","Estalo"], ["WW005","Impacto de pedra"]]) {
+  for (const [id, label] of [["WW002","Chicote de folha"], ["WW003","Jato d’água"], ["WW004","Estalo"], ["WW005","Impacto de pedra"], ["WW006","Clarão de vaga-lume"]]) {
     await fixture(id);
     await page.getByRole("button", { name: new RegExp(label) }).click();
     await phase("player");

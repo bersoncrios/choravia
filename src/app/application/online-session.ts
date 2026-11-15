@@ -276,7 +276,7 @@ export class OnlineSession {
   }
   async dispatch(command: Command): Promise<void> {
     if (this.busy || !this.ready) return;
-    if (command.type === "applyDailyReward" || command.type === "rematchNpc" || command.type === "restoreEnvironment") return;
+    if (command.type === "applyDailyReward" || command.type === "rematchNpc" || command.type === "restoreEnvironment" || command.type === "setTeam" || command.type === "switchBattleEco") return;
     if (
       command.type === "walk" ||
       command.type === "activate" ||

@@ -1,13 +1,27 @@
 import type { SpeciesId } from "./game.js";
 export type CustomAccessoryId = `custom-${string}`;
-export type AccessoryShape = "pin" | "scarf" | "crown";
+export const ACCESSORY_MODELS = {
+ pin: { name: "Broche de cristal", glyph: "◆" }, scarf: { name: "Lenço de trilha", glyph: "≈" }, crown: { name: "Coroa de folhas", glyph: "♛" },
+ flower: { name: "Flor de Iara", glyph: "✿" }, halo: { name: "Aro de luz", glyph: "◌" }, feather: { name: "Pena do vento", glyph: "➶" }, leaf: { name: "Folha guardiã", glyph: "❧" },
+ headband: { name: "Faixa bordada", glyph: "▬" }, antlers: { name: "Galhos jovens", glyph: "♧" }, moth: { name: "Mariposa", glyph: "⋈" }, star: { name: "Estrela guia", glyph: "✦" }, bell: { name: "Sino de semente", glyph: "♟" },
+ medallion: { name: "Medalhão do coro", glyph: "●" }, ribbon: { name: "Laço de festa", glyph: "🎀" }, satchel: { name: "Bolsa de explorador", glyph: "▣" }, cape: { name: "Capa curta", glyph: "◢" }, wristband: { name: "Pulseira de fibras", glyph: "═" },
+ mask: { name: "Máscara de casca", glyph: "◒" }, horn: { name: "Chifre de broto", glyph: "♢" }, shell: { name: "Concha de maré", glyph: "◉" },
+} as const;
+export type AccessoryShape = keyof typeof ACCESSORY_MODELS;
 export interface AccessoryVisual { id: CustomAccessoryId; shape: AccessoryShape; color: string }
 export interface CustomAccessory extends AccessoryVisual { name: string; description: string; price: number; active: boolean; revision: number }
 export interface BalanceStats { hp: number; attack: number; defense: number }
 export type BalanceConfig = Partial<Record<SpeciesId, BalanceStats>>;
 export interface BalanceEntry extends BalanceStats { id: SpeciesId; revision: number }
-export type BadgeSymbol = "star" | "leaf" | "flame" | "gem" | "crown";
-export const BADGE_SYMBOLS: Record<BadgeSymbol, string> = { star: "★", leaf: "❧", flame: "♨", gem: "◆", crown: "♛" };
+export const BADGE_SYMBOLS = {
+ star: "★", leaf: "❧", flame: "♨", gem: "◆", crown: "♛", moon: "☾", sun: "☼", wave: "≈", tree: "♣", sprout: "♧",
+ heart: "♥", feather: "➶", spiral: "◉", compass: "✥", drop: "♦", flower: "✿", lightning: "ϟ", paw: "●", ring: "◌", music: "♫",
+} as const;
+export type BadgeSymbol = keyof typeof BADGE_SYMBOLS;
+export const BADGE_SYMBOL_NAMES: Record<BadgeSymbol, string> = {
+ star: "Estrela", leaf: "Folha", flame: "Chama", gem: "Cristal", crown: "Coroa", moon: "Lua", sun: "Sol", wave: "Onda", tree: "Árvore", sprout: "Broto",
+ heart: "Coração", feather: "Pena", spiral: "Espiral", compass: "Bússola", drop: "Gota", flower: "Flor", lightning: "Relâmpago", paw: "Pegada", ring: "Aro", music: "Melodia",
+};
 export interface BadgeDefinition { id: string; name: string; description: string; color: string; symbol: BadgeSymbol; category: "event" | "milestone" | "special"; active: boolean; revision: number }
 export interface PlayerBadge { badgeId: string; name: string; description: string; color: string; symbol: BadgeSymbol; category: BadgeDefinition["category"]; reason: string; grantedBy: string; grantedAt: number }
 export interface LiveContent { accessories: CustomAccessory[]; balance: BalanceEntry[]; badges: BadgeDefinition[] }
@@ -23,7 +37,7 @@ const text = (v: unknown, min: number, max: number): v is string => typeof v ===
 const integer = (v: unknown, min: number, max: number): boolean => Number.isSafeInteger(v) && Number(v) >= min && Number(v) <= max;
 export const isCustomAccessoryId = (v: unknown): v is CustomAccessoryId => typeof v === "string" && /^custom-[a-z0-9-]{3,54}$/.test(v);
 export const validColor = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
-export function isAccessoryVisual(v: unknown): v is AccessoryVisual { return record(v) && isCustomAccessoryId(v["id"]) && ["pin", "scarf", "crown"].includes(String(v["shape"])) && validColor(v["color"]); }
+export function isAccessoryVisual(v: unknown): v is AccessoryVisual { return record(v) && isCustomAccessoryId(v["id"]) && Object.hasOwn(ACCESSORY_MODELS, String(v["shape"])) && validColor(v["color"]); }
 export function isCustomAccessory(v: unknown): v is CustomAccessory { return record(v) && isAccessoryVisual(v) && text(v["name"], 2, 60) && text(v["description"], 5, 240) && integer(v["price"], 0, 10000) && typeof v["active"] === "boolean" && integer(v["revision"], 0, 1000000); }
 export function isBalanceStats(v: unknown): v is BalanceStats { return record(v) && integer(v["hp"], 20, 200) && integer(v["attack"], 1, 50) && integer(v["defense"], 1, 50); }
 export function isBalanceConfig(v: unknown): v is BalanceConfig { return record(v) && Object.entries(v).length <= 6 && Object.entries(v).every(([id, stats]) => /^WW00[1-6]$/.test(id) && isBalanceStats(stats)); }

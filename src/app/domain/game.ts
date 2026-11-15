@@ -173,6 +173,9 @@ export interface Battle {
   allyCooldown?: number;
   enemyCooldown?: number;
   turnFrames?: TurnFrame[];
+  awaitingReplacement?: boolean;
+  /** Tactical hazard KO can happen before the already-earned enemy response. */
+  replacementEnemyTurn?: boolean;
   id: string;
   kind?: "wild" | "npc";
   challengeId?: string;
@@ -221,6 +224,8 @@ export interface Game {
   armed: boolean;
   collection: Creature[];
   activeId: string;
+  /** Ordered party; absent on old saves and inferred from activeId plus collection. */
+  teamIds?: string[];
   battle: Battle | null;
   encountered: number;
   captured: number;
@@ -263,7 +268,9 @@ export type Command =
   | { type: "rematchNpc"; npcId?: string }
   | { type: "restoreEnvironment"; id: string; method: "eco" | "manual" }
   | { type: "purchase"; itemId: StoreItemId }
-  | { type: "activate"; id: string };
+  | { type: "activate"; id: string }
+  | { type: "setTeam"; ids: string[] }
+  | { type: "switchBattleEco"; id: string };
 export const same = (a: Position, b: Position): boolean =>
   a.x === b.x && a.y === b.y;
 export const distance = (a: Position, b: Position): number =>
@@ -305,6 +312,7 @@ export function initialGame(seed = ((Date.now() ^ Math.floor(Math.random() * 0xf
       { id: "starter", speciesId: "WW001", hp: creatureMaxHp("WW001", 1), level: 1, experience: 0, provenance: "local" },
     ],
     activeId: "starter",
+    teamIds: ["starter"],
     battle: null,
     encountered: 0,
     captured: 0,
@@ -478,6 +486,11 @@ export function activeCreature(g: Game): Creature {
   const c = g.collection.find((c) => c.id === g.activeId);
   if (!c) throw new Error("Criatura ativa ausente");
   return c;
+}
+export function teamOf(g: Game): string[] {
+  const ids = g.teamIds?.length ? g.teamIds : [g.activeId, ...g.collection.map(c => c.id).filter(id => id !== g.activeId)];
+  const valid = ids.filter((id, index) => g.collection.some(c => c.id === id) && ids.indexOf(id) === index).slice(0, 3);
+  return valid.includes(g.activeId) ? [g.activeId, ...valid.filter(id => id !== g.activeId)] : [g.activeId, ...valid].slice(0, 3);
 }
 export function elementalMultiplier(
   a: Element | "neutral",
@@ -679,10 +692,14 @@ export function createBattle(
   b.plan = enemyPlan(b);
   return b;
 }
-function checkEnd(b: Battle): boolean {
-  if (b.ally.hp <= 0) b.result = "defeat";
+function checkEnd(b: Battle, canReplace = false): boolean {
+  if (b.ally.hp <= 0) {
+    if (b.enemy.hp <= 0) b.result = "defeat";
+    else if (canReplace) b.awaitingReplacement = true;
+    else b.result = "defeat";
+  }
   else if (b.enemy.hp <= 0) b.result = "victory";
-  return b.result !== null;
+  return b.result !== null || !!b.awaitingReplacement;
 }
 function resolveAttack(
   b: Battle,
@@ -718,11 +735,11 @@ function resolveAttack(
   )
     b.cells[cellIndex(target)] = { terrain: "fire", remaining: 4 };
 }
-function endTurn(b: Battle, actor: Fighter): boolean {
-  if (checkEnd(b)) return true;
+function endTurn(b: Battle, actor: Fighter, canReplace = false): boolean {
+  if (checkEnd(b, canReplace)) return true;
   if (b.cells[cellIndex(actor.pos)]?.terrain === "fire")
     actor.hp = Math.max(0, actor.hp - 3);
-  const ended = checkEnd(b);
+  const ended = checkEnd(b, canReplace);
   for (const c of b.cells)
     if (c.terrain === "fire") {
       c.remaining--;
@@ -730,14 +747,14 @@ function endTurn(b: Battle, actor: Fighter): boolean {
     }
   return ended;
 }
-function enemyTurn(b: Battle): void {
+function enemyTurn(b: Battle, canReplace = false): void {
   b.enemy.guarding = false;
   const p = b.plan;
   if (!same(p.destination, b.ally.pos)) b.enemy.pos = { ...p.destination };
   if (p.action !== "defend" && distance(b.enemy.pos, p.target) === 1)
     resolveAttack(b, "enemy", p.action, p.target);
   else b.enemy.guarding = true;
-  if (endTurn(b, b.enemy)) return;
+  if (endTurn(b, b.enemy, canReplace)) return;
   if (b.round === 40) {
     b.result = "escaped";
     return;
@@ -788,6 +805,7 @@ function finish(g: Game): void {
     } else g.message = "Treino encerrado. Você pode tentar novamente; sem Sementes ou XP.";
   } else if (b.result === "capture") {
     const id = `capture-${b.id}`;
+    const partyBeforeCapture = teamOf(g);
     if (!g.collection.some((c) => c.id === id)) {
       g.collection.push({
         id,
@@ -797,6 +815,7 @@ function finish(g: Game): void {
         experience: 0,
         provenance: "local",
       });
+      if (partyBeforeCapture.length < 3) g.teamIds = [...partyBeforeCapture, id];
       g.captured++;
       g.events.push({
         id: `capture:${b.id}`,
@@ -885,6 +904,7 @@ export function reduceGame(previous: Game, command: Command): Game {
     first.experience ??= 0;
     first.hp = creatureMaxHp(command.speciesId, first.level, g.balance);
     g.activeId = first.id;
+    g.teamIds = [first.id];
     g.starterChosen = true;
     g.message = `${species(command.speciesId).name} escolheu caminhar com você.`;
     return commit();
@@ -911,7 +931,7 @@ export function reduceGame(previous: Game, command: Command): Game {
     g.armed = false;
     if (activeCreature(g).hp <= 0) {
       const healthy = g.collection.find((c) => c.hp > 0);
-      if (healthy) g.activeId = healthy.id;
+      if (healthy) { g.activeId = healthy.id; g.teamIds = [healthy.id, ...teamOf(g).filter(id => id !== healthy.id)]; }
       else {
         for (const c of g.collection) c.hp = creatureMaxHp(c.speciesId, creatureLevel(c), g.balance);
         g.player = { x: 8, y: 10 };
@@ -1123,13 +1143,42 @@ export function reduceGame(previous: Game, command: Command): Game {
       const c = g.collection.find((c) => c.id === command.id && c.hp > 0);
       if (!c) return reject();
       g.activeId = c.id;
+      g.teamIds = [c.id, ...teamOf(g).filter(id => id !== c.id)].slice(0, 3);
       g.message = `${species(c.speciesId).name} agora caminha ao seu lado.`;
+      return commit();
+    }
+    if (command.type === "setTeam") {
+      if (!Array.isArray(command.ids) || command.ids.length < 1 || command.ids.length > 3 || new Set(command.ids).size !== command.ids.length) return reject();
+      const members = command.ids.map(id => g.collection.find(c => c.id === id));
+      if (members.some(c => !c || c.hp <= 0)) return reject();
+      g.teamIds = [...command.ids]; g.activeId = command.ids[0]!;
+      g.message = `Time atualizado: ${members.map(c => species(c!.speciesId).name).join(", ")}.`;
       return commit();
     }
     return reject();
   }
   if (g.scene !== "battle" || !g.battle || g.battle.result) return reject();
   const b = g.battle;
+  if (b.awaitingReplacement) {
+    if (command.type !== "switchBattleEco") return reject();
+    const roster = teamOf(g);
+    const next = g.collection.find(c => c.id === command.id && roster.includes(c.id) && c.id !== g.activeId && c.hp > 0);
+    if (!next) return reject();
+    const fainted = g.collection.find(c => c.id === g.activeId);
+    if (fainted) fainted.hp = 0;
+    g.activeId = next.id;
+    g.teamIds = [next.id, ...roster.filter(id => id !== next.id)];
+    b.ally = { speciesId: next.speciesId, hp: next.hp, level: creatureLevel(next), pos: { ...b.ally.pos }, guarding: false };
+    b.awaitingReplacement = false;
+    b.turnFrames = undefined;
+    const pendingEnemy = !!b.replacementEnemyTurn;
+    b.replacementEnemyTurn = false;
+    g.message = `${species(next.speciesId).name} entrou na luta.`;
+    if (pendingEnemy) enemyTurn(b, teamOf(g).some(id => id !== next.id && (g.collection.find(c => c.id === id)?.hp ?? 0) > 0));
+    finish(g);
+    return commit();
+  }
+  if (command.type === "switchBattleEco" || command.type === "setTeam") return reject();
   if (b.mode === "classic") {
     if (!["basic", "skill", "defend", "capture", "flee"].includes(command.type)) return reject();
     if ((command.type === "basic" || command.type === "skill") && !same(command.target, b.enemy.pos)) return reject();
@@ -1179,10 +1228,12 @@ export function reduceGame(previous: Game, command: Command): Game {
       resolveAttack(b, "enemy", action, b.ally.pos);
       b.enemyCooldown = action === "skill" ? 1 : Math.max(0, (b.enemyCooldown ?? 0) - 1);
       frame("enemy", attackText("enemy", action, hp), action);
-      checkEnd(b);
+      checkEnd(b, teamOf(g).some(id => id !== g.activeId && (g.collection.find(c => c.id === id)?.hp ?? 0) > 0));
       if (!b.result && b.round === 40) b.result = "escaped";
       if (!b.result) b.round++;
     }
+    const active = g.collection.find(c => c.id === g.activeId);
+    if (active) active.hp = b.ally.hp;
     b.plan = enemyPlan(b);
     finish(g);
     return commit();
@@ -1241,7 +1292,11 @@ export function reduceGame(previous: Game, command: Command): Game {
     g.message =
       "O vínculo ainda não se formou. A próxima tentativa será mais forte.";
   } else return reject();
-  if (!endTurn(b, b.ally)) enemyTurn(b);
+  const hasReserve = teamOf(g).some(id => id !== g.activeId && (g.collection.find(c => c.id === id)?.hp ?? 0) > 0);
+  if (!endTurn(b, b.ally, hasReserve)) enemyTurn(b, hasReserve);
+  else if (b.awaitingReplacement && b.ally.hp <= 0 && !b.result) b.replacementEnemyTurn = true;
+  const active = g.collection.find(c => c.id === g.activeId);
+  if (active) active.hp = b.ally.hp;
   finish(g);
   return commit();
 }

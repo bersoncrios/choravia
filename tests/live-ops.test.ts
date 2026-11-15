@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { MemoryStore } from "../functions/src/memory-store.js";
 import { LiveOpsService } from "../src/app/domain/online-engine/live-ops-service.js";
-import { parseLiveOpsRequest, type CustomAccessory, type BadgeDefinition, type LiveContent } from "../src/app/domain/live-ops.js";
+import { ACCESSORY_MODELS, BADGE_SYMBOLS, parseLiveOpsRequest, type CustomAccessory, type BadgeDefinition, type LiveContent } from "../src/app/domain/live-ops.js";
 import { applyLiveContent } from "../src/app/application/live-content.js";
 import { initialGame, reduceGame, createBattle, damage, creatureMaxHp, canCapture } from "../src/app/domain/game.js";
 import { isGame } from "../src/app/domain/save-validation.js";
@@ -18,6 +18,12 @@ test("live ops validates payloads and refuses non-admins before any content writ
  assert.equal(f.store.all("shop_accessories/").length, 0);
  for (const value of [{ ...accessory, price: -1 }, { ...accessory, color: "url(javascript:x)" }, { ...accessory, id: "custom-../bad" }, { ...accessory, shape: "script" }, { ...accessory, role: "admin" }]) assert.throws(() => parseLiveOpsRequest({ ...req, value }));
  assert.throws(() => parseLiveOpsRequest({ ...req, extra: true }));
+});
+test("GM accessory models and badge symbols expose twenty valid visual choices",()=>{
+ assert.equal(Object.keys(ACCESSORY_MODELS).length,20);
+ assert.equal(Object.keys(BADGE_SYMBOLS).length,20);
+ for(const shape of Object.keys(ACCESSORY_MODELS)) parseLiveOpsRequest({method:"saveAccessory",requestId:"visual-model-001",reason:"Validação visual",value:{...accessory,shape}});
+ for(const symbol of Object.keys(BADGE_SYMBOLS)) parseLiveOpsRequest({method:"saveBadge",requestId:"visual-symbol-01",reason:"Validação visual",value:{...badge,symbol}});
 });
 test("catalog publication is audited, idempotent and detects conflicting GM edits", async () => {
  const f = await fixture(); const req = { method: "saveAccessory" as const, value: accessory, requestId: "request-002", reason: "Festival anual" };

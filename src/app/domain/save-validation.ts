@@ -147,6 +147,7 @@ export function isGame(value: unknown): value is Game {
   }
   if (typeof value["activeId"] !== "string" || !ids.has(value["activeId"]))
     return false;
+  if (value["teamIds"] !== undefined && (!Array.isArray(value["teamIds"]) || value["teamIds"].length < 1 || value["teamIds"].length > 3 || new Set(value["teamIds"]).size !== value["teamIds"].length || !value["teamIds"].every((id: unknown) => typeof id === "string" && ids.has(id)) || value["teamIds"][0] !== value["activeId"])) return false;
   const ownedItems = Array.isArray(value["ownedItems"])
     ? (value["ownedItems"] as string[])
     : [];
@@ -267,8 +268,12 @@ export function isGame(value: unknown): value is Game {
   if (b["kind"] === "npc" && (typeof b["challengeId"] !== "string" || !REGION_ORDER.some((area) => layoutIn(value as unknown as Game, area).npcs.some((npc) => npc.id === b["challengeId"])))) return false;
   if (b["kind"] !== "npc" && b["challengeId"] !== undefined) return false;
   if (b["kind"] === "npc" && result === "capture") return false;
+  const awaitingReplacement = b["awaitingReplacement"] === true;
+  if (b["awaitingReplacement"] !== undefined && typeof b["awaitingReplacement"] !== "boolean") return false;
+  if (b["replacementEnemyTurn"] !== undefined && typeof b["replacementEnemyTurn"] !== "boolean") return false;
+  if (awaitingReplacement && (ally.hp !== 0 || result !== null || !((value["teamIds"] as string[] | undefined) ?? [value["activeId"]]).some(id => id !== value["activeId"] && collection.some((c: unknown) => isRecord(c) && c["id"] === id && Number(c["hp"]) > 0)))) return false;
   if (value["scene"] === "battle")
-    return result === null && ally.hp > 0 && enemy.hp > 0;
+    return result === null && enemy.hp > 0 && (ally.hp > 0 || awaitingReplacement);
   return ["capture", "victory", "defeat", "fled", "escaped"].includes(
     String(result),
   );

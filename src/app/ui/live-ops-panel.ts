@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, signal } from "@angular/core";
 import { SPECIES, type SpeciesId } from "../domain/game.js";
-import { BADGE_SYMBOLS, EMPTY_LIVE_CONTENT, type LiveContent, type LiveOpsRequest, type LiveOpsResult, type CustomAccessory, type BadgeDefinition, type BalanceEntry, type AccessoryShape, type BadgeSymbol, type ContentAuditEntry } from "../domain/live-ops.js";
+import { ACCESSORY_MODELS, BADGE_SYMBOLS, BADGE_SYMBOL_NAMES, EMPTY_LIVE_CONTENT, type LiveContent, type LiveOpsRequest, type LiveOpsResult, type CustomAccessory, type BadgeDefinition, type BalanceEntry, type AccessoryShape, type BadgeSymbol, type ContentAuditEntry } from "../domain/live-ops.js";
 @Component({
  selector: "ww-live-ops-panel", standalone: true, changeDetection: ChangeDetectionStrategy.OnPush,
  template: `
@@ -15,8 +15,8 @@ import { BADGE_SYMBOLS, EMPTY_LIVE_CONTENT, type LiveContent, type LiveOpsReques
     <label>Nome do acessório<input aria-label="Nome do acessório" maxlength="60" [value]="accessory().name" (input)="patchAccessory('name', $any($event.target).value)" /></label>
     <label>Descrição do acessório<textarea maxlength="240" [value]="accessory().description" (input)="patchAccessory('description', $any($event.target).value)"></textarea></label>
     <div class="live-ops-row"><label>Preço em Sementes<input type="number" min="0" max="10000" [value]="accessory().price" (input)="patchAccessory('price', +$any($event.target).value)" /></label><label>Cor do acessório<input type="color" [value]="accessory().color" (input)="patchAccessory('color', $any($event.target).value)" /></label></div>
-    <label>Modelo visual<select aria-label="Modelo visual" [value]="accessory().shape" (change)="patchAccessory('shape', $any($event.target).value)"><option value="pin">Broche</option><option value="scarf">Lenço</option><option value="crown">Coroa</option></select></label>
-    <div class="accessory-sample" [style.color]="accessory().color" aria-label="Prévia do acessório">{{ accessory().shape === 'crown' ? '♛' : accessory().shape === 'scarf' ? '≈' : '◆' }}</div>
+    <label>Modelo visual<select aria-label="Modelo visual" [value]="accessory().shape" (change)="patchAccessory('shape', $any($event.target).value)">@for (model of accessoryChoices; track model.id) { <option [value]="model.id">{{ model.name }}</option> }</select></label>
+    <div class="accessory-sample" [style.color]="accessory().color" aria-label="Prévia do acessório"><span [attr.data-shape]="accessory().shape">{{ accessoryModels[accessory().shape].glyph }}</span><small>{{ accessoryModels[accessory().shape].name }}</small></div>
     <label class="live-ops-check"><input type="checkbox" [checked]="accessory().active" (change)="patchAccessory('active', $any($event.target).checked)" /> Disponível na loja</label>
     <button class="primary" (click)="saveAccessory()" [disabled]="!canSave()">Salvar acessório</button>
    </div>
@@ -34,7 +34,8 @@ import { BADGE_SYMBOLS, EMPTY_LIVE_CONTENT, type LiveContent, type LiveOpsReques
    <div class="live-ops-form">
     <label>Nome da badge<input maxlength="60" [value]="badge().name" (input)="patchBadge('name', $any($event.target).value)" /></label>
     <label>Descrição da badge<textarea maxlength="240" [value]="badge().description" (input)="patchBadge('description', $any($event.target).value)"></textarea></label>
-    <div class="live-ops-row"><label>Categoria<select aria-label="Categoria" [value]="badge().category" (change)="patchBadge('category', $any($event.target).value)"><option value="event">Evento</option><option value="milestone">Marco</option><option value="special">Especial</option></select></label><label>Cor da badge<input type="color" [value]="badge().color" (input)="patchBadge('color', $any($event.target).value)" /></label><label>Símbolo<select aria-label="Símbolo" [value]="badge().symbol" (change)="patchBadge('symbol', $any($event.target).value)"><option value="star">★ Estrela</option><option value="leaf">❧ Folha</option><option value="flame">♨ Chama</option><option value="gem">◆ Cristal</option><option value="crown">♛ Coroa</option></select></label></div>
+    <div class="live-ops-row"><label>Categoria<select aria-label="Categoria" [value]="badge().category" (change)="patchBadge('category', $any($event.target).value)"><option value="event">Evento</option><option value="milestone">Marco</option><option value="special">Especial</option></select></label><label>Cor da badge<input type="color" [value]="badge().color" (input)="patchBadge('color', $any($event.target).value)" /></label><label>Símbolo<select aria-label="Símbolo" [value]="badge().symbol" (change)="patchBadge('symbol', $any($event.target).value)">@for (symbol of badgeSymbolChoices; track symbol.id) { <option [value]="symbol.id">{{ symbol.glyph }} {{ symbol.name }}</option> }</select></label></div>
+    <div class="badge-symbol-preview" [style.color]="badge().color" aria-label="Prévia do símbolo da badge">{{ symbols[badge().symbol] }}<small>{{ badgeSymbolName(badge().symbol) }}</small></div>
     <label class="live-ops-check"><input type="checkbox" [checked]="badge().active" (change)="patchBadge('active', $any($event.target).checked)" /> Permitir novas concessões</label>
     <button class="primary" (click)="saveBadge()" [disabled]="!canSave()">Salvar badge</button>
     <label>UID para conceder badge<input [value]="grantUid() || targetUid || ''" (input)="grantUid.set($any($event.target).value)" placeholder="Selecione um jogador ou cole o UID" /></label>
@@ -57,7 +58,9 @@ export class LiveOpsPanelComponent {
  readonly audit = signal<ContentAuditEntry[]>([]);
  async refreshAudit() { this.busy.set(true); this.error.set(""); try { this.audit.set(await this.loadAudit()); } catch (e) { this.error.set((e as Error).message); } finally { this.busy.set(false); } }
  @Input() execute!: (request: LiveOpsRequest) => Promise<LiveOpsResult>;
- readonly species = SPECIES; readonly symbols = BADGE_SYMBOLS;
+ readonly species = SPECIES; readonly symbols = BADGE_SYMBOLS; readonly accessoryModels = ACCESSORY_MODELS;
+ readonly accessoryChoices = Object.entries(ACCESSORY_MODELS).map(([id, model]) => ({id: id as AccessoryShape, ...model}));
+ readonly badgeSymbolChoices = Object.entries(BADGE_SYMBOLS).map(([id, glyph]) => ({id: id as BadgeSymbol, glyph, name: BADGE_SYMBOL_NAMES[id as BadgeSymbol]}));
  readonly grantUid = signal(""); readonly busy = signal(false); readonly message = signal(""); readonly error = signal("");
  readonly accessory = signal<CustomAccessory>(this.accessoryDraft());
  readonly badge = signal<BadgeDefinition>(this.badgeDraft());
@@ -65,6 +68,7 @@ export class LiveOpsPanelComponent {
  private ids = new Map<string, string>();
  actionLabel(action: string) { return ({ saveAccessory: "Acessório publicado", saveBalance: "Atributos atualizados", saveBadge: "Badge publicada", grantBadge: "Badge concedida" } as Record<string, string>)[action] ?? action; }
  auditDate(time: number) { return new Date(time).toLocaleString("pt-BR"); }
+ badgeSymbolName(id: BadgeSymbol) { return this.badgeSymbolChoices.find(symbol => symbol.id === id)?.name ?? id; }
  copy<T>(value: T): T { return structuredClone(value); }
  private accessoryDraft(): CustomAccessory { return { id: `custom-${crypto.randomUUID()}`, name: "", description: "", shape: "pin", color: "#f0cf78", price: 50, active: true, revision: 0 }; }
  private badgeDraft(): BadgeDefinition { return { id: `badge-${crypto.randomUUID()}`, name: "", description: "", color: "#f0cf78", symbol: "star", category: "event", active: true, revision: 0 }; }

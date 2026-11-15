@@ -170,3 +170,17 @@ Nas respostas de trabalho, começar com o papel em uso, por exemplo `### [AGENTE
 - Trilhas diárias podem sortear “Siga uma trilha nova”. Progresso só é registrado após uma transição de portal aceita, em vez de contar passos ou apenas abrir o mapa.
 - Validação final: `npm test` passou **165/165**; Rules/contas/recompensas em emuladores demo passaram **14/14**; Chromium do Diário confirmou cinco regiões/seis Ecos, travessia, layouts 320/390/768/1360 px e gerou `artifacts/firefly-marsh.png`; `npm run build` e `git diff --check` aprovados. Captura visual revisada. Vite mantém o aviso existente de bundle principal acima de 500 kB.
 - Ainda propostos: coleta renovável específica do Brejo, NPC/missão, segredo, Serra dos Ecos, Ruínas do Primeiro Coro, mais espécies, puzzles/rotas reutilizáveis e outras trilhas verificáveis. Nada foi publicado nem houve alteração de dados de produção.
+
+## Continuação — catálogo visual do Game Master
+
+- Acessórios personalizados agora têm 20 modelos nomeados com prévia no GM, guarda-roupa e desenho dedicado no Canvas. Os IDs `pin`, `scarf` e `crown` permanecem os mesmos para preservar acessórios já publicados/equipados.
+- Badges têm 20 símbolos com nomes em português e prévia colorida. Os cinco símbolos anteriores continuam válidos. As Rules locais aceitam o novo catálogo; produção não foi alterada.
+- Validação: `npm test` **166/166**; Auth/Firestore emulados **14/14**, incluindo publicação de acessório `antlers` e badge `moon`; Chromium do GM aprovou criar, publicar, comprar, equipar e pré-visualizar um modelo novo, criar/conceder badge `music` e quatro larguras; build AOT/Vite aprovado. Aviso do bundle principal acima de 500 kB permanece.
+- Alterações locais sem commit/push/publicação. Publicar frontend e Rules compatíveis juntos somente quando autorizado.
+
+## Continuação — Ecos com arte vetorial 2D
+
+- Substituído o mosaico de 9×9 pixels dos seis Ecos por desenhos vetoriais suaves no Canvas. Cada espécie tem silhueta e detalhes próprios, contorno, sombra, brilho e gradação de cor; isso vale para o retrato de batalha sem carregar bitmaps externos ou mudar IDs/saves.
+- `drawCreature` continua sendo a fonte comum para escala tática e combate clássico; as animações existentes permanecem e movimento reduzido continua respeitado.
+- Validação: build AOT/Vite aprovado; Chromium de combate exercitou habilidades dos seis Ecos, fases de turno, captura/reload e sete tamanhos de tela. Captura após a mudança em `artifacts/combat-classic-390.png`. O bundle principal segue acima de 500 kB.
+- Alteração local sem publicação. A arte vetorial foi revisada no retrato de Braseco e Brotatu; próximas iterações podem ajustar proporções e levar os retratos do Canvas também aos painéis de coleção/diário.
